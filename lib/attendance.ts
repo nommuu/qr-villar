@@ -24,6 +24,7 @@ export type TeacherEventAttendance = {
   attendeeCount: number;
   attendees: {
     studentId: string;
+    studentName: string | null;
     scannedAt: string;
   }[];
 };
@@ -180,7 +181,6 @@ export async function getTeacherEventAttendance(
     return [];
   }
 
-  // Step 2: Get attendance for those events
   const { data: attendance, error: attError } = await supabase
     .from("attendance")
     .select("student_id, scanned_at, event_id")
@@ -198,6 +198,16 @@ export async function getTeacherEventAttendance(
       attendees: [],
     }));
   }
+  const studentIds = [...new Set(attendance.map((a: any) => a.student_id))];
+
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, full_name, email")
+    .in("id", studentIds);
+
+  const profileMap = new Map(
+    (profiles ?? []).map((profile: any) => [profile.id, profile.full_name]),
+  );
 
   // Step 3: Group attendance by event
   return events.map((e: any) => {
@@ -212,6 +222,7 @@ export async function getTeacherEventAttendance(
       attendeeCount: rows.length,
       attendees: rows.map((a: any) => ({
         studentId: a.student_id,
+        studentName: profileMap.get(a.student_id) ?? null,
         scannedAt: a.scanned_at,
       })),
     };
