@@ -150,7 +150,7 @@ export default function RegisterScreen() {
                   editable={!loading}
                 />
 
-                <Text style={styles.label}>I am a...</Text>
+                <Text style={styles.label}>I am registering as a</Text>
 
                 <View style={styles.roleRow}>
                   <Pressable

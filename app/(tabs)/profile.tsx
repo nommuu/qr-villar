@@ -19,6 +19,7 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(false);
   const [fetchingProfile, setFetchingProfile] = useState(true);
   const router = useRouter();
+
   const [profile, setProfile] = useState<Profile | null>(null);
   const [draftName, setDraftName] = useState("");
   const [editing, setEditing] = useState(false);
@@ -43,6 +44,7 @@ export default function ProfileScreen() {
     const p = await getProfile(user.id);
     setProfile(p);
     setDraftName(p?.full_name ?? "");
+    setFetchingProfile(false);
   }, [user]);
 
   useFocusEffect(
@@ -76,26 +78,18 @@ export default function ProfileScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>My Profile</Text>
 
+      {/* Role */}
       {profile?.role === "teacher" ? (
-        <View style={styles.roleBadge}>
+        <View style={[styles.roleBadge, styles.roleBadgeColored]}>
           <Text style={styles.roleBadgeText}>Teacher</Text>
         </View>
       ) : (
-        <View style={[styles.roleBadge, styles.roleBadgeStudent]}>
+        <View style={[styles.roleBadge, styles.roleBadgeColored]}>
           <Text style={styles.roleBadgeText}>Student</Text>
         </View>
       )}
 
-      {user && (
-        <View style={styles.infoCard}>
-          <Text style={styles.label}>Email</Text>
-          <Text style={styles.value}>{user.email}</Text>
-
-          <Text style={styles.label}>User ID</Text>
-          <Text style={styles.valueSmall}>{user.id}</Text>
-        </View>
-      )}
-
+      {/* Name */}
       {editing ? (
         <View style={styles.nameEditRow}>
           <TextInput
@@ -105,8 +99,14 @@ export default function ProfileScreen() {
             style={styles.nameInput}
           />
 
-          <Pressable onPress={handleSaveName} style={styles.saveButton}>
-            <Text style={styles.saveButtonText}>Save</Text>
+          <Pressable
+            onPress={handleSaveName}
+            style={styles.saveButton}
+            disabled={saving}
+          >
+            <Text style={styles.saveButtonText}>
+              {saving ? "Saving..." : "Save"}
+            </Text>
           </Pressable>
         </View>
       ) : (
@@ -119,6 +119,18 @@ export default function ProfileScreen() {
         </Pressable>
       )}
 
+      {/* Account Information */}
+      {user && (
+        <View style={styles.infoCard}>
+          <Text style={styles.label}>Email</Text>
+          <Text style={styles.value}>{user.email}</Text>
+
+          <Text style={styles.label}>User ID</Text>
+          <Text style={styles.valueSmall}>{user.id}</Text>
+        </View>
+      )}
+
+      {/* Sign Out */}
       <AppButton
         title="Sign Out"
         icon="log-out-outline"
@@ -144,36 +156,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
 
-  infoCard: {
-    backgroundColor: COLORS.card,
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 24,
-  },
-
-  label: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-    marginBottom: 4,
-    marginTop: 8,
-  },
-
-  value: {
-    fontSize: 15,
-    color: COLORS.textPrimary,
-    fontWeight: "500",
-  },
-
-  valueSmall: {
-    fontSize: 11,
-    color: COLORS.textSecondary,
-  },
-
   roleBadge: {
-    backgroundColor: COLORS.card,
     borderWidth: 1,
-    borderColor: COLORS.border,
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 20,
@@ -181,19 +165,15 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
 
-  roleBadgeText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: COLORS.textPrimary,
-  },
-
-  roleBadgeStudent: {
+  roleBadgeColored: {
     backgroundColor: COLORS.primary,
     borderColor: COLORS.primary,
   },
 
-  roleBadgeTextStudent: {
-    color: "#fff",
+  roleBadgeText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
 
   nameRow: {
@@ -231,12 +211,38 @@ const styles = StyleSheet.create({
   },
 
   saveButtonText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontWeight: "600",
   },
 
   editHint: {
     fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+
+  infoCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 24,
+  },
+
+  label: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: COLORS.textSecondary,
+    marginBottom: 4,
+    marginTop: 8,
+  },
+
+  value: {
+    fontSize: 15,
+    color: COLORS.textPrimary,
+    fontWeight: "500",
+  },
+
+  valueSmall: {
+    fontSize: 11,
     color: COLORS.textSecondary,
   },
 });
