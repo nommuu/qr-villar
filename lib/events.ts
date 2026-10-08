@@ -1,7 +1,7 @@
 import { supabase } from "./supabase";
 
 export type Event = {
-  eventId: string; // the public event code (from the UI, e.g. EVT-2026-0002)
+  eventId: string;
   title: string;
   start: string;
   end: string;
@@ -15,6 +15,9 @@ export type CloudEvent = {
   end_time: string | null;
   created_by: string | null;
   created_at: string;
+  venue?: string | null;
+  description?: string | null;
+  status?: "open" | "closed";
 };
 
 export async function createEvent(
@@ -66,4 +69,35 @@ export async function getEventByCode(code: string): Promise<CloudEvent | null> {
   }
 
   return data as CloudEvent;
+}
+
+export async function getAllEvents(): Promise<CloudEvent[]> {
+  const { data, error } = await supabase
+    .from("events")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error || !data) {
+    console.log("GET ALL EVENTS ERROR:", error?.message);
+    return [];
+  }
+
+  return data as CloudEvent[];
+}
+
+export async function updateEventStatus(
+  eventId: string,
+  status: "open" | "closed",
+): Promise<{ error: string | null }> {
+  const { error } = await supabase.rpc("admin_update_event_status", {
+    target_event_id: eventId,
+    new_status: status,
+  });
+
+  if (error) {
+    console.log("UPDATE EVENT STATUS ERROR:", error.message);
+    return { error: error.message };
+  }
+
+  return { error: null };
 }

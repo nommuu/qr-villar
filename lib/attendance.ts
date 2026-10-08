@@ -115,7 +115,9 @@ export async function getAttendanceHistory(
     .eq("student_id", studentId)
     .order("scanned_at", { ascending: false });
 
-  if (error || !data) return [];
+  if (error || !data) {
+    return [];
+  }
 
   return data.map((row: any) => ({
     id: row.id,
@@ -222,18 +224,24 @@ export async function getTeacherEventSummary(
     .eq("created_by", teacherId)
     .order("created_at", { ascending: false });
 
-  if (eventError || !events) return [];
+  if (eventError || !events) {
+    return [];
+  }
 
   const eventIds = events.map((e: any) => e.id);
 
-  if (eventIds.length === 0) return [];
+  if (eventIds.length === 0) {
+    return [];
+  }
 
   const { data: attRows, error: attError } = await supabase
     .from("attendance")
     .select("event_id")
     .in("event_id", eventIds);
 
-  if (attError || !attRows) return [];
+  if (attError || !attRows) {
+    return [];
+  }
 
   const counts: Record<string, number> = {};
 
@@ -247,4 +255,81 @@ export async function getTeacherEventSummary(
     title: e.title,
     attendeeCount: counts[e.id] ?? 0,
   }));
+}
+
+/*
+ * ADMIN ATTENDANCE MANAGEMENT
+ */
+
+export type AdminAttendanceRecord = {
+  id: string;
+  studentId: string;
+  eventId: string;
+  scannedAt: string;
+  studentName: string | null;
+  studentEmail: string | null;
+  eventCode: string | null;
+  eventTitle: string | null;
+};
+
+export async function getAllAttendance(): Promise<AdminAttendanceRecord[]> {
+  const { data, error } = await supabase.rpc("get_all_attendance");
+
+  if (error || !data) {
+    console.log("GET ALL ATTENDANCE ERROR:", error?.message);
+    return [];
+  }
+
+  return data.map((row: any) => ({
+    id: row.id,
+    studentId: row.student_id,
+    eventId: row.event_id,
+    scannedAt: row.scanned_at,
+    studentName: row.student_name ?? null,
+    studentEmail: row.student_email ?? null,
+    eventCode: row.event_code ?? null,
+    eventTitle: row.event_title ?? null,
+  }));
+}
+
+/*
+ * ADMIN DELETE ATTENDANCE
+ */
+
+export async function deleteAttendance(
+  attendanceId: string,
+): Promise<{ error: string | null }> {
+  const { error } = await supabase.rpc("admin_delete_attendance", {
+    target_attendance_id: attendanceId,
+  });
+
+  if (error) {
+    console.log("DELETE ATTENDANCE ERROR:", error.message);
+    return { error: error.message };
+  }
+
+  return { error: null };
+}
+
+/*
+ * ADMIN EDIT ATTENDANCE
+ */
+
+export async function updateAttendance(
+  attendanceId: string,
+  studentId: string,
+  eventId: string,
+): Promise<{ error: string | null }> {
+  const { error } = await supabase.rpc("admin_update_attendance", {
+    target_attendance_id: attendanceId,
+    target_student_id: studentId,
+    target_event_id: eventId,
+  });
+
+  if (error) {
+    console.log("UPDATE ATTENDANCE ERROR:", error.message);
+    return { error: error.message };
+  }
+
+  return { error: null };
 }
