@@ -1,5 +1,6 @@
 import type { Session, User } from "@supabase/supabase-js";
 import { useEffect, useState } from "react";
+
 import { supabase } from "./supabase";
 
 type AuthState = {
@@ -11,10 +12,11 @@ type AuthState = {
 let globalSession: Session | null = null;
 let globalUser: User | null = null;
 let globalLoading = false;
-let listeners: Set<() => void> = new Set();
+
+const listeners: Set<() => void> = new Set();
 
 function notify() {
-  listeners.forEach((l) => l());
+  listeners.forEach((listener) => listener());
 }
 
 export function setAuth(session: Session | null) {
@@ -29,7 +31,9 @@ export function useAuth(): AuthState {
 
   useEffect(() => {
     const listener = () => forceRender((n) => n + 1);
+
     listeners.add(listener);
+
     return () => {
       listeners.delete(listener);
     };
@@ -55,17 +59,13 @@ export async function signUp(
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
+    options: {
+      data: {
+        full_name: profile?.full_name.trim() ?? "",
+        role: "student",
+      },
+    },
   });
-
-  if (!error && data.session && profile) {
-    await supabase
-      .from("profiles")
-      .update({
-        full_name: profile.full_name,
-        role: profile.role,
-      })
-      .eq("id", data.session.user.id);
-  }
 
   if (!error && data.session) {
     setAuth(data.session);
@@ -79,14 +79,18 @@ export async function signIn(email: string, password: string) {
     email,
     password,
   });
+
   if (!error && data.session) {
     setAuth(data.session);
   }
+
   return { data, error };
 }
 
 export async function signOut() {
   setAuth(null);
-  supabase.auth.signOut().catch(() => {});
-  return { error: null };
+
+  const { error } = await supabase.auth.signOut();
+
+  return { error };
 }

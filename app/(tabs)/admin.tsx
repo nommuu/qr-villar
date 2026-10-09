@@ -1,7 +1,11 @@
+import * as FileSystem from "expo-file-system/legacy";
 import { useFocusEffect } from "expo-router";
+import * as Sharing from "expo-sharing";
 import { useCallback, useState } from "react";
 import {
+  Alert,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -27,6 +31,116 @@ import {
 } from "@/lib/profiles";
 
 export default function AdminScreen(): React.JSX.Element {
+  const handleExportAttendance = async (): Promise<void> => {
+    if (filteredAttendance.length === 0) {
+      if (Platform.OS === "web") {
+        window.alert(
+          "No attendance records available to export for this filter.",
+        );
+      } else {
+        Alert.alert(
+          "No attendance records",
+          "No attendance records available to export for this filter.",
+        );
+      }
+      return;
+    }
+
+    try {
+      const headers = [
+        "Student Name",
+        "Student Email",
+        "Event Name",
+        "Event Code",
+        "Scanned At",
+      ];
+
+      const escapeCsv = (value: unknown): string => {
+        let text = String(value ?? "");
+
+        // Prevent spreadsheet formula injection.
+        if (/^[\t\r ]*[=+\-@]/.test(text)) {
+          text = "'" + text;
+        }
+
+        return `"${text.replace(/"/g, '""')}"`;
+      };
+
+      const rows = filteredAttendance.map((record) => [
+        record.studentName || "Unknown student",
+        record.studentEmail || "No email",
+        record.eventTitle || "Unknown event",
+        record.eventCode || "No event code",
+        formatDateTime(record.scannedAt),
+      ]);
+
+      const csvContent =
+        "\uFEFF" +
+        [headers, ...rows]
+          .map((row) => row.map((value) => escapeCsv(value)).join(","))
+          .join("\r\n");
+
+      const fileName =
+        selectedReportEventId === "all"
+          ? "qr-attendance-report.csv"
+          : "qr-attendance-event-report.csv";
+
+      if (Platform.OS === "web") {
+        // Download directly in the browser.
+        const blob = new Blob([csvContent], {
+          type: "text/csv;charset=utf-8;",
+        });
+
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+
+        link.href = url;
+        link.download = fileName;
+        link.style.display = "none";
+
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        window.setTimeout(() => {
+          URL.revokeObjectURL(url);
+        }, 1000);
+
+        return;
+      }
+
+      // Save the CSV temporarily on Android or iOS.
+      if (!FileSystem.cacheDirectory) {
+        throw new Error("File cache directory is unavailable.");
+      }
+
+      const fileUri = FileSystem.cacheDirectory + fileName;
+
+      await FileSystem.writeAsStringAsync(fileUri, csvContent, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+
+      // Open the native share sheet so the user can save or share the CSV.
+      await Sharing.shareAsync(fileUri, {
+        mimeType: "text/csv",
+        dialogTitle: "Export attendance report",
+        UTI: "public.comma-separated-values-text",
+      });
+    } catch (error) {
+      console.error("CSV export failed:", error);
+
+      if (Platform.OS === "web") {
+        window.alert(
+          "Unable to export the attendance report. Please try again.",
+        );
+      } else {
+        Alert.alert(
+          "Export failed",
+          "Unable to export the attendance report. Please try again.",
+        );
+      }
+    }
+  };
   const { user } = useAuth();
 
   const [role, setRole] = useState<Role | null>(null);
@@ -48,6 +162,13 @@ export default function AdminScreen(): React.JSX.Element {
   // ATTENDANCE MANAGEMENT
   const [attendance, setAttendance] = useState<AdminAttendanceRecord[]>([]);
   const [loadingAttendance, setLoadingAttendance] = useState<boolean>(false);
+  const [selectedReportEventId, setSelectedReportEventId] =
+    useState<string>("all");
+
+  const filteredAttendance =
+    selectedReportEventId === "all"
+      ? attendance
+      : attendance.filter((record) => record.eventId === selectedReportEventId);
 
   const [selectedAttendance, setSelectedAttendance] =
     useState<AdminAttendanceRecord | null>(null);
@@ -298,11 +419,9 @@ export default function AdminScreen(): React.JSX.Element {
         style={styles.container}
         contentContainerStyle={styles.content}
       >
-        <Text style={styles.title}>Administrator</Text>
+        <Text style={styles.title}>Admin Dashboard</Text>
 
-        <Text style={styles.subtitle}>
-          Manage the QR-ATT attendance system.
-        </Text>
+        <Text style={styles.subtitle}>QR-ATT Management System.</Text>
 
         {/* USER MANAGEMENT */}
 
@@ -535,8 +654,166 @@ export default function AdminScreen(): React.JSX.Element {
           <Text style={styles.cardTitle}>Reports</Text>
 
           <Text style={styles.cardDescription}>
-            View overall attendance information and system summaries.
+            Filter attendance records by event and export the selected report.
           </Text>
+
+          {/* ATTENDANCE STATISTICS */}
+          <View style={styles.reportStatsContainer}>
+            <View style={styles.reportStatBox}>
+              <Text style={styles.reportStatNumber}>{attendance.length}</Text>
+              <Text style={styles.reportStatLabel}>Total Attendance</Text>
+            </View>
+
+            <View style={styles.reportStatBox}>
+              <Text style={styles.reportStatNumber}>
+                {users.filter((profile) => profile.role === "student").length}
+              </Text>
+              <Text style={styles.reportStatLabel}>Total Students</Text>
+            </View>
+
+            <View style={styles.reportStatBox}>
+              <Text style={styles.reportStatNumber}>{events.length}</Text>
+              <Text style={styles.reportStatLabel}>Total Events</Text>
+            </View>
+          </View>
+
+          {/* EVENT FILTER */}
+          <Text style={styles.reportSectionTitle}>Filter by Event</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.reportFilterList}
+          >
+            <TouchableOpacity
+              style={[
+                styles.reportFilterButton,
+                selectedReportEventId === "all" &&
+                  styles.reportFilterButtonSelected,
+              ]}
+              onPress={() => setSelectedReportEventId("all")}
+            >
+              <Text
+                style={[
+                  styles.reportFilterButtonText,
+                  selectedReportEventId === "all" &&
+                    styles.reportFilterButtonTextSelected,
+                ]}
+              >
+                All Events
+              </Text>
+            </TouchableOpacity>
+
+            {events.map((event: CloudEvent) => (
+              <TouchableOpacity
+                key={event.id}
+                style={[
+                  styles.reportFilterButton,
+                  selectedReportEventId === event.id &&
+                    styles.reportFilterButtonSelected,
+                ]}
+                onPress={() => setSelectedReportEventId(event.id)}
+              >
+                <Text
+                  style={[
+                    styles.reportFilterButtonText,
+                    selectedReportEventId === event.id &&
+                      styles.reportFilterButtonTextSelected,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {event.title || event.event_code}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {/* EXPORT FILTERED RECORDS */}
+          <TouchableOpacity
+            style={styles.exportReportButton}
+            onPress={handleExportAttendance}
+            disabled={filteredAttendance.length === 0}
+          >
+            <Text style={styles.exportReportButtonText}>
+              {filteredAttendance.length === 0
+                ? "No Records to Export"
+                : "Export Filtered Report (CSV)"}
+            </Text>
+          </TouchableOpacity>
+
+          {/* FILTERED ATTENDANCE RECORDS */}
+          <Text style={styles.reportSectionTitle}>
+            Attendance Records ({filteredAttendance.length})
+          </Text>
+
+          {loadingAttendance ? (
+            <Text style={styles.loadingText}>
+              Loading attendance records...
+            </Text>
+          ) : filteredAttendance.length === 0 ? (
+            <Text style={styles.emptyText}>
+              No attendance records found for this selection.
+            </Text>
+          ) : (
+            filteredAttendance.map((record: AdminAttendanceRecord) => (
+              <View key={record.id} style={styles.reportEventItem}>
+                <Text style={styles.reportEventTitle}>
+                  {record.studentName || "Unknown student"}
+                </Text>
+                <Text style={styles.reportEventDetails}>
+                  Email: {record.studentEmail || "No email"}
+                </Text>
+                <Text style={styles.reportEventDetails}>
+                  Event: {record.eventTitle || "Unknown event"}
+                </Text>
+                <Text style={styles.reportEventDetails}>
+                  Event Code: {record.eventCode || "No event code"}
+                </Text>
+                <Text style={styles.reportEventDetails}>
+                  Scanned: {formatDateTime(record.scannedAt)}
+                </Text>
+              </View>
+            ))
+          )}
+
+          {/* EVENT SUMMARIES */}
+          <Text style={styles.reportSectionTitle}>
+            Event Attendance Summary
+          </Text>
+
+          {events.length === 0 ? (
+            <Text style={styles.cardDescription}>
+              No events available for reporting.
+            </Text>
+          ) : (
+            events
+              .filter(
+                (event) =>
+                  selectedReportEventId === "all" ||
+                  event.id === selectedReportEventId,
+              )
+              .map((event: CloudEvent) => {
+                const eventAttendance = attendance.filter(
+                  (record) => record.eventId === event.id,
+                );
+
+                return (
+                  <View key={event.id} style={styles.reportEventItem}>
+                    <Text style={styles.reportEventTitle}>
+                      {event.title || "Untitled event"}
+                    </Text>
+                    <Text style={styles.reportEventDetails}>
+                      Event Code: {event.event_code}
+                    </Text>
+                    <Text style={styles.reportEventDetails}>
+                      Attendance Records: {eventAttendance.length}
+                    </Text>
+                    <Text style={styles.reportEventDetails}>
+                      Status: {event.status || "Unknown"}
+                    </Text>
+                  </View>
+                );
+              })
+          )}
         </View>
       </ScrollView>
 
@@ -703,6 +980,115 @@ export default function AdminScreen(): React.JSX.Element {
 }
 
 const styles = StyleSheet.create({
+  exportReportButton: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 10,
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 12,
+  },
+
+  exportReportButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+
+  reportFilterList: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingBottom: 8,
+    gap: 8,
+  },
+
+  reportFilterButton: {
+    maxWidth: 200,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+
+  reportFilterButtonSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+
+  reportFilterButtonText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: COLORS.textPrimary,
+  },
+
+  reportFilterButtonTextSelected: {
+    color: COLORS.textOnPrimary,
+  },
+
+  reportStatsContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8,
+    marginTop: 16,
+    marginBottom: 20,
+  },
+
+  reportStatBox: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 6,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  reportStatNumber: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: COLORS.primary,
+  },
+
+  reportStatLabel: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    marginTop: 5,
+  },
+
+  reportSectionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: COLORS.textPrimary,
+    marginBottom: 12,
+  },
+
+  reportEventItem: {
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+  },
+
+  reportEventTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: COLORS.textPrimary,
+    marginBottom: 5,
+  },
+
+  reportEventDetails: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 3,
+  },
   container: {
     flex: 1,
     backgroundColor: COLORS.background,

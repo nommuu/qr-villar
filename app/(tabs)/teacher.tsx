@@ -94,7 +94,7 @@ export default function TeacherScreen() {
     );
   }
 
-  if (role !== "teacher") {
+  if (role !== "teacher" && role !== "admin") {
     return (
       <View style={styles.lockContainer}>
         <Ionicons name="lock-closed-outline" size={48} color={COLORS.primary} />
