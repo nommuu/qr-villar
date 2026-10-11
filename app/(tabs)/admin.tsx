@@ -980,552 +980,522 @@ export default function AdminScreen(): React.JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  exportReportButton: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 10,
-    paddingVertical: 13,
-    paddingHorizontal: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 12,
-  },
-
-  exportReportButtonText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-
-  reportFilterList: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingBottom: 8,
-    gap: 8,
-  },
-
-  reportFilterButton: {
-    maxWidth: 200,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-
-  reportFilterButtonSelected: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-
-  reportFilterButtonText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: COLORS.textPrimary,
-  },
-
-  reportFilterButtonTextSelected: {
-    color: COLORS.textOnPrimary,
-  },
-
-  reportStatsContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 8,
-    marginTop: 16,
-    marginBottom: 20,
-  },
-
-  reportStatBox: {
-    flex: 1,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 6,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  reportStatNumber: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: COLORS.primary,
-  },
-
-  reportStatLabel: {
-    fontSize: 11,
-    color: COLORS.textSecondary,
-    textAlign: "center",
-    marginTop: 5,
-  },
-
-  reportSectionTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: COLORS.textPrimary,
-    marginBottom: 12,
-  },
-
-  reportEventItem: {
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
-  },
-
-  reportEventTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: COLORS.textPrimary,
-    marginBottom: 5,
-  },
-
-  reportEventDetails: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    marginTop: 3,
-  },
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
   },
-
   content: {
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 32,
+    paddingHorizontal: 18,
+    paddingTop: 22,
+    paddingBottom: 40,
   },
-
   centerContainer: {
     flex: 1,
     backgroundColor: COLORS.background,
     alignItems: "center",
     justifyContent: "center",
+    padding: 24,
   },
-
   title: {
-    fontSize: 24,
-    fontWeight: "700",
+    fontSize: 28,
+    fontWeight: "800",
     color: COLORS.textPrimary,
     marginBottom: 6,
   },
-
   subtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: COLORS.textSecondary,
     lineHeight: 20,
-    marginBottom: 24,
+    marginBottom: 22,
   },
 
+  // DASHBOARD CARDS
   card: {
     backgroundColor: COLORS.card,
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 14,
+    borderRadius: 22,
+    padding: 17,
+    marginBottom: 17,
     borderWidth: 1,
     borderColor: COLORS.border,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
   },
-
   cardTitle: {
-    fontSize: 17,
-    fontWeight: "600",
+    fontSize: 18,
+    fontWeight: "800",
     color: COLORS.textPrimary,
     marginBottom: 6,
   },
-
   cardDescription: {
-    fontSize: 14,
+    fontSize: 12,
     color: COLORS.textSecondary,
-    lineHeight: 20,
+    lineHeight: 19,
   },
-
   divider: {
     height: 1,
     backgroundColor: COLORS.border,
     marginVertical: 16,
   },
-
   sectionTitle: {
     fontSize: 15,
-    fontWeight: "600",
+    fontWeight: "800",
     color: COLORS.textPrimary,
     marginBottom: 12,
   },
-
   loadingText: {
-    fontSize: 14,
+    fontSize: 13,
     color: COLORS.textSecondary,
-    paddingVertical: 8,
+    paddingVertical: 12,
   },
-
   emptyText: {
-    fontSize: 14,
+    fontSize: 13,
     color: COLORS.textSecondary,
-    paddingVertical: 8,
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
+    padding: 14,
+    lineHeight: 19,
   },
 
-  // USER STYLES
-
+  // USER MANAGEMENT
   userItem: {
-    paddingVertical: 14,
+    paddingVertical: 15,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-
   userInfo: {
-    marginBottom: 10,
+    marginBottom: 12,
   },
-
   userName: {
     fontSize: 15,
-    fontWeight: "600",
+    fontWeight: "800",
     color: COLORS.textPrimary,
-    marginBottom: 3,
+    marginBottom: 4,
   },
-
   userEmail: {
-    fontSize: 13,
+    fontSize: 12,
     color: COLORS.textSecondary,
-    marginBottom: 3,
+    marginBottom: 4,
   },
-
   userId: {
-    fontSize: 11,
-    color: COLORS.textSecondary,
+    fontSize: 10,
+    color: COLORS.textMuted,
   },
-
   userActions: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: 10,
     width: "100%",
   },
-
   roleBadge: {
     backgroundColor: COLORS.primary,
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
-
   roleBadgeText: {
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "800",
     color: COLORS.textOnPrimary,
   },
-
   editRoleButton: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.primarySoft,
     borderWidth: 1,
-    borderColor: COLORS.primary,
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    minWidth: 90,
+    borderColor: COLORS.primaryLight,
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    minWidth: 100,
     alignItems: "center",
     justifyContent: "center",
   },
-
   editRoleButtonText: {
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "800",
     color: COLORS.primary,
   },
 
-  // EVENT STYLES
-
+  // EVENT MANAGEMENT
   eventItem: {
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
   },
-
   eventTitle: {
     fontSize: 15,
-    fontWeight: "600",
+    fontWeight: "800",
     color: COLORS.textPrimary,
-    marginBottom: 4,
-  },
-
-  eventCode: {
-    fontSize: 12,
-    color: COLORS.primary,
     marginBottom: 6,
   },
-
+  eventCode: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: COLORS.primary,
+    marginBottom: 9,
+  },
   eventTime: {
-    fontSize: 13,
+    fontSize: 12,
     color: COLORS.textSecondary,
+    lineHeight: 19,
     marginBottom: 3,
   },
-
   eventVenue: {
-    fontSize: 13,
+    fontSize: 12,
     color: COLORS.textSecondary,
-    marginBottom: 4,
+    marginTop: 5,
   },
-
   eventDescription: {
-    fontSize: 13,
+    fontSize: 12,
     color: COLORS.textSecondary,
     lineHeight: 18,
-    marginBottom: 8,
+    marginTop: 5,
   },
-
   eventBottomRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 8,
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 13,
   },
-
   statusBadge: {
-    borderRadius: 20,
+    borderRadius: 999,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 7,
   },
-
   openBadge: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.successBackground,
   },
-
   closedBadge: {
-    backgroundColor: COLORS.textSecondary,
-  },
-
-  statusBadgeText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: COLORS.textOnPrimary,
-  },
-
-  closeButton: {
     backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.textSecondary,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
   },
-
-  closeButtonText: {
-    fontSize: 12,
-    fontWeight: "600",
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: "800",
     color: COLORS.textPrimary,
   },
-
-  reopenButton: {
-    backgroundColor: COLORS.surface,
+  closeButton: {
+    backgroundColor: COLORS.dangerBackground,
     borderWidth: 1,
-    borderColor: COLORS.primary,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    borderColor: COLORS.danger,
+    borderRadius: 11,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
   },
-
+  closeButtonText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: COLORS.danger,
+  },
+  reopenButton: {
+    backgroundColor: COLORS.successBackground,
+    borderWidth: 1,
+    borderColor: COLORS.success,
+    borderRadius: 11,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+  },
   reopenButtonText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: COLORS.primary,
+    fontSize: 11,
+    fontWeight: "800",
+    color: COLORS.success,
   },
 
-  // ATTENDANCE STYLES
-
+  // ATTENDANCE MANAGEMENT
   attendanceItem: {
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
   },
-
   attendanceStudent: {
     fontSize: 15,
+    fontWeight: "800",
+    color: COLORS.textPrimary,
+    marginBottom: 4,
+  },
+  attendanceEmail: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginBottom: 9,
+  },
+  attendanceEvent: {
+    fontSize: 12,
     fontWeight: "600",
     color: COLORS.textPrimary,
-    marginBottom: 3,
+    marginBottom: 4,
+    lineHeight: 18,
   },
-
-  attendanceEmail: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    marginBottom: 6,
-  },
-
-  attendanceEvent: {
-    fontSize: 13,
-    color: COLORS.textPrimary,
-    marginBottom: 3,
-  },
-
   attendanceCode: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    marginBottom: 3,
+    fontSize: 11,
+    color: COLORS.primary,
+    marginBottom: 4,
   },
-
   attendanceTime: {
-    fontSize: 12,
+    fontSize: 11,
     color: COLORS.textSecondary,
+    lineHeight: 17,
   },
-
   attendanceActions: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
-    marginTop: 10,
+    marginTop: 13,
   },
-
   editAttendanceButton: {
     flex: 1,
-    backgroundColor: COLORS.surface,
+    minWidth: 110,
+    backgroundColor: COLORS.primarySoft,
     borderWidth: 1,
-    borderColor: COLORS.primary,
-    borderRadius: 10,
-    paddingVertical: 9,
+    borderColor: COLORS.primaryLight,
+    borderRadius: 11,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
     alignItems: "center",
     justifyContent: "center",
   },
-
   editAttendanceButtonText: {
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "800",
     color: COLORS.primary,
   },
-
   deleteAttendanceButton: {
-    marginTop: 10,
-    backgroundColor: COLORS.surface,
+    flex: 1,
+    minWidth: 110,
+    backgroundColor: COLORS.dangerBackground,
     borderWidth: 1,
-    borderColor: "#D32F2F",
-    borderRadius: 10,
-    paddingVertical: 9,
+    borderColor: COLORS.danger,
+    borderRadius: 11,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
     alignItems: "center",
     justifyContent: "center",
   },
-
   deleteAttendanceButtonText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#D32F2F",
+    fontSize: 11,
+    fontWeight: "800",
+    color: COLORS.danger,
   },
 
-  // MODAL STYLES
+  // REPORTS
+  exportReportButton: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 14,
+    paddingVertical: 15,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 12,
+    marginBottom: 20,
+  },
+  exportReportButtonText: {
+    color: COLORS.textOnPrimary,
+    fontSize: 13,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  reportStatsContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8,
+    marginTop: 16,
+    marginBottom: 22,
+  },
+  reportStatBox: {
+    flex: 1,
+    backgroundColor: COLORS.primarySoft,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 15,
+    paddingVertical: 15,
+    paddingHorizontal: 5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reportStatNumber: {
+    fontSize: 23,
+    fontWeight: "800",
+    color: COLORS.primary,
+  },
+  reportStatLabel: {
+    fontSize: 10,
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    marginTop: 5,
+    lineHeight: 15,
+  },
+  reportSectionTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: COLORS.textPrimary,
+    marginBottom: 12,
+  },
+  reportFilterList: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingBottom: 12,
+    gap: 8,
+  },
+  reportFilterButton: {
+    maxWidth: 200,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  reportFilterButtonSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  reportFilterButtonText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: COLORS.textPrimary,
+  },
+  reportFilterButtonTextSelected: {
+    color: COLORS.textOnPrimary,
+  },
+  reportEventItem: {
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    padding: 13,
+    marginBottom: 10,
+  },
+  reportEventTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: COLORS.textPrimary,
+    marginBottom: 5,
+  },
+  reportEventDetails: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    marginTop: 3,
+    lineHeight: 17,
+  },
 
+  // MODALS
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.45)",
+    backgroundColor: "rgba(39, 33, 59, 0.55)",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 24,
   },
-
   modalContainer: {
     width: "100%",
+    maxWidth: 480,
+    maxHeight: "90%",
     backgroundColor: COLORS.card,
-    borderRadius: 20,
-    padding: 22,
+    borderRadius: 22,
+    padding: 20,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-
   modalTitle: {
     fontSize: 20,
-    fontWeight: "700",
+    fontWeight: "800",
     color: COLORS.textPrimary,
-    marginBottom: 6,
+    marginBottom: 7,
   },
-
   modalSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: COLORS.textSecondary,
-    marginBottom: 8,
+    lineHeight: 19,
+    marginBottom: 10,
   },
-
   currentRole: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    marginBottom: 18,
+    fontSize: 12,
+    fontWeight: "700",
+    color: COLORS.primary,
+    backgroundColor: COLORS.primarySoft,
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 15,
   },
-
   formLabel: {
-    fontSize: 13,
-    fontWeight: "600",
+    fontSize: 12,
+    fontWeight: "800",
     color: COLORS.textPrimary,
     marginBottom: 8,
+    marginTop: 5,
   },
-
   selectionList: {
     maxHeight: 130,
     marginBottom: 14,
   },
-
   selectionButton: {
     width: "100%",
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.background,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: 10,
-    paddingVertical: 10,
+    borderRadius: 12,
+    paddingVertical: 11,
     paddingHorizontal: 12,
     marginBottom: 7,
   },
-
   selectionButtonSelected: {
     borderColor: COLORS.primary,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.primarySoft,
   },
-
   selectionButtonText: {
-    fontSize: 13,
-    fontWeight: "600",
+    fontSize: 12,
+    fontWeight: "700",
     color: COLORS.textPrimary,
   },
-
   selectionButtonTextSelected: {
     color: COLORS.primary,
   },
-
   selectionSecondaryText: {
-    fontSize: 11,
+    fontSize: 10,
     color: COLORS.textSecondary,
-    marginTop: 2,
+    marginTop: 4,
   },
-
   modalButton: {
     width: "100%",
     backgroundColor: COLORS.primary,
-    borderRadius: 12,
-    paddingVertical: 13,
+    borderRadius: 13,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
     alignItems: "center",
+    justifyContent: "center",
     marginBottom: 10,
   },
-
   modalButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 13,
+    fontWeight: "800",
     color: COLORS.textOnPrimary,
   },
-
   cancelButton: {
     width: "100%",
+    backgroundColor: COLORS.card,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: 12,
+    borderRadius: 13,
     paddingVertical: 13,
     alignItems: "center",
-    marginTop: 4,
+    marginTop: 3,
   },
-
   cancelButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 13,
+    fontWeight: "800",
     color: COLORS.textSecondary,
   },
 
   // ACCESS DENIED
-
   lockContainer: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -1533,16 +1503,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 32,
   },
-
   lockTitle: {
-    fontSize: 20,
-    fontWeight: "600",
+    fontSize: 21,
+    fontWeight: "800",
     color: COLORS.textPrimary,
     marginBottom: 8,
+    textAlign: "center",
   },
-
   lockSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: COLORS.textSecondary,
     textAlign: "center",
     lineHeight: 20,

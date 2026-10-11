@@ -11,55 +11,52 @@ type Props = {
   disabled?: boolean;
 };
 
-export default function AppButton({ title, icon, theme, onPress }: Props) {
-  if (theme === "primary") {
-    return (
-      <View
-        style={[
-          styles.buttonOuter,
-          {
-            borderWidth: 1,
-            borderColor: COLORS.primary,
-            borderRadius: 10,
-          },
-        ]}
-      >
-        <Pressable
-          style={[styles.buttonInner, { backgroundColor: COLORS.primary }]}
-          onPress={onPress}
-        >
-          <Ionicons
-            name={icon}
-            size={22}
-            color={COLORS.textOnPrimary}
-            style={styles.icon}
-          />
-          <Text
-            style={[
-              styles.label,
-              {
-                color: COLORS.textOnPrimary,
-                fontWeight: "700",
-              },
-            ]}
-          >
-            {title}
-          </Text>
-        </Pressable>
-      </View>
-    );
-  }
+export default function AppButton({
+  title,
+  icon,
+  theme,
+  onPress,
+  disabled = false,
+}: Props) {
+  const isPrimary = theme === "primary";
 
   return (
     <View style={styles.buttonOuter}>
-      <Pressable style={styles.buttonInner} onPress={onPress}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={title}
+        accessibilityState={{ disabled }}
+        disabled={disabled}
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.buttonInner,
+          isPrimary ? styles.primaryButton : styles.secondaryButton,
+          disabled && styles.disabledButton,
+          pressed && !disabled && styles.pressedButton,
+        ]}
+      >
         <Ionicons
           name={icon}
-          size={22}
-          color={COLORS.textSecondary}
+          size={21}
+          color={
+            disabled
+              ? COLORS.textMuted
+              : isPrimary
+                ? COLORS.textOnPrimary
+                : COLORS.primary
+          }
           style={styles.icon}
         />
-        <Text style={styles.label}>{title}</Text>
+
+        <Text
+          style={[
+            styles.label,
+            isPrimary && styles.primaryLabel,
+            disabled && styles.disabledLabel,
+          ]}
+        >
+          {title}
+        </Text>
       </Pressable>
     </View>
   );
@@ -72,24 +69,58 @@ const styles = StyleSheet.create({
   },
 
   buttonInner: {
-    borderRadius: 10,
-    paddingVertical: 16,
+    minHeight: 54,
+    borderRadius: 16,
+    paddingVertical: 15,
     paddingHorizontal: 20,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
-    backgroundColor: COLORS.card,
     borderWidth: 1,
+  },
+
+  primaryButton: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.14,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+
+  secondaryButton: {
+    backgroundColor: COLORS.card,
     borderColor: COLORS.border,
   },
 
+  pressedButton: {
+    opacity: 0.82,
+    transform: [{ scale: 0.99 }],
+  },
+
+  disabledButton: {
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+
   icon: {
-    paddingRight: 10,
+    marginRight: 10,
   },
 
   label: {
-    fontSize: 17,
-    fontWeight: "600",
+    fontSize: 16,
+    fontWeight: "700",
     color: COLORS.textPrimary,
+  },
+
+  primaryLabel: {
+    color: COLORS.textOnPrimary,
+  },
+
+  disabledLabel: {
+    color: COLORS.textMuted,
   },
 });
