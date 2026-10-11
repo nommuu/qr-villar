@@ -63,7 +63,7 @@ export default function RegisterScreen() {
     try {
       const { data, error: authError } = await signUp(email.trim(), password, {
         full_name: fullName.trim(),
-        role,
+        role: "student",
       });
 
       if (authError) {
@@ -325,9 +325,10 @@ export default function RegisterScreen() {
                 </View>
 
                 <View style={styles.roleSection}>
-                  <Text style={styles.label}>Register as</Text>
+                  <Text style={styles.label}>Account type</Text>
                   <Text style={styles.roleHint}>
-                    Choose the role that describes your account.
+                    All new accounts start as Students. Teacher access requires
+                    verification by the Admin.
                   </Text>
 
                   <View style={styles.roleRow}>
@@ -413,7 +414,7 @@ export default function RegisterScreen() {
                         Teacher
                       </Text>
                       <Text style={styles.roleDescription}>
-                        Manage events and view attendees
+                        Requires Admin verification
                       </Text>
 
                       <View style={styles.radioOuter}>
@@ -422,6 +423,19 @@ export default function RegisterScreen() {
                         )}
                       </View>
                     </Pressable>
+                  </View>
+
+                  <View style={styles.registrationNotice}>
+                    <Ionicons
+                      name="information-circle-outline"
+                      size={22}
+                      color={COLORS.primary}
+                    />
+                    <Text style={styles.registrationNoticeText}>
+                      New accounts are registered as Students. If you're a
+                      Teacher, create your account first, then request teacher
+                      verification from the Admin to receive Teacher access.
+                    </Text>
                   </View>
                 </View>
 
@@ -717,6 +731,25 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
     backgroundColor: COLORS.primary,
+  },
+
+  registrationNotice: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: COLORS.primarySoft,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    padding: 13,
+    marginTop: 14,
+    gap: 10,
+  },
+
+  registrationNoticeText: {
+    flex: 1,
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    lineHeight: 19,
   },
 
   errorContainer: {

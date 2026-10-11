@@ -211,20 +211,53 @@ export default function TeacherScreen() {
   if (role !== "teacher" && role !== "admin") {
     return (
       <View style={styles.lockContainer}>
-        <View style={styles.lockIcon}>
+        <View style={styles.lockIconCircle}>
           <Ionicons
-            name="lock-closed-outline"
-            size={34}
+            name="shield-checkmark-outline"
+            size={42}
             color={COLORS.primary}
           />
+
+          <View style={styles.lockBadge}>
+            <Ionicons
+              name="lock-closed"
+              size={16}
+              color={COLORS.textOnPrimary}
+            />
+          </View>
         </View>
+
+        <Text style={styles.lockEyebrow}>RESTRICTED ACCESS</Text>
 
         <Text style={styles.lockTitle}>Teachers Only</Text>
 
         <Text style={styles.lockSubtitle}>
-          Only teacher and administrator accounts can create events and generate
-          event QR codes.
+          This section is reserved for teachers and administrators. Student
+          accounts cannot create events or generate attendance QR codes.
         </Text>
+
+        <View style={styles.lockNotice}>
+          <Ionicons
+            name="information-circle-outline"
+            size={21}
+            color={COLORS.primary}
+          />
+
+          <Text style={styles.lockNoticeText}>
+            Contact your school administrator if you need teacher access.
+          </Text>
+        </View>
+
+        <View style={styles.lockFooter}>
+          <Ionicons
+            name="shield-checkmark-outline"
+            size={15}
+            color={COLORS.textMuted}
+          />
+          <Text style={styles.lockFooterText}>
+            QR-ATT · Protected Teacher Workspace
+          </Text>
+        </View>
       </View>
     );
   }
@@ -1131,31 +1164,94 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 28,
+    paddingVertical: 32,
   },
 
-  lockIcon: {
-    width: 76,
-    height: 76,
-    borderRadius: 25,
+  lockIconCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 32,
     backgroundColor: COLORS.primarySoft,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 14,
+    marginBottom: 20,
+    position: "relative",
+  },
+
+  lockBadge: {
+    position: "absolute",
+    right: -5,
+    bottom: -3,
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 3,
+    borderColor: COLORS.background,
+  },
+
+  lockEyebrow: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 2,
+    color: COLORS.primary,
+    marginBottom: 5,
+    textAlign: "center",
   },
 
   lockTitle: {
-    fontSize: 21,
+    fontSize: 25,
     fontWeight: "800",
     color: COLORS.textPrimary,
-    marginTop: 12,
+    marginTop: 4,
     textAlign: "center",
   },
 
   lockSubtitle: {
     fontSize: 14,
     color: COLORS.textSecondary,
-    lineHeight: 21,
-    marginTop: 8,
+    lineHeight: 22,
+    marginTop: 10,
+    textAlign: "center",
+    maxWidth: 340,
+  },
+
+  lockNotice: {
+    width: "100%",
+    maxWidth: 340,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: COLORS.primarySoft,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 16,
+    padding: 15,
+    marginTop: 25,
+    gap: 10,
+  },
+
+  lockNoticeText: {
+    flex: 1,
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    lineHeight: 19,
+  },
+
+  lockFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    marginTop: 28,
+  },
+
+  lockFooterText: {
+    fontSize: 10,
+    color: COLORS.textMuted,
     textAlign: "center",
   },
 

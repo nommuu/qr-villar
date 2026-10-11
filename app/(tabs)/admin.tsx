@@ -1,3 +1,4 @@
+import Ionicons from "@expo/vector-icons/Ionicons";
 import * as FileSystem from "expo-file-system/legacy";
 import { useFocusEffect } from "expo-router";
 import * as Sharing from "expo-sharing";
@@ -404,11 +405,30 @@ export default function AdminScreen(): React.JSX.Element {
   if (role !== "admin") {
     return (
       <View style={styles.lockContainer}>
-        <Text style={styles.lockTitle}>Administrators Only</Text>
+        <View style={styles.lockIconCircle}>
+          <Ionicons name="shield-checkmark" size={54} color={COLORS.primary} />
+          <View style={styles.lockBadge}>
+            <Ionicons name="lock-closed" size={18} color="#FFFFFF" />
+          </View>
+        </View>
+
+        <Text style={styles.lockTitle}>Admin Only</Text>
 
         <Text style={styles.lockSubtitle}>
-          Only administrator accounts can access this section.
+          This area is restricted to administrators. Please log in with an
+          administrator account to access the QR-ATT Management System.
         </Text>
+
+        <View style={styles.lockNotice}>
+          <Ionicons
+            name="shield-checkmark-outline"
+            size={18}
+            color={COLORS.primary}
+          />
+          <Text style={styles.lockNoticeText}>
+            Administrator Access Required
+          </Text>
+        </View>
       </View>
     );
   }
@@ -980,6 +1000,73 @@ export default function AdminScreen(): React.JSX.Element {
 }
 
 const styles = StyleSheet.create({
+  // ACCESS DENIED
+  lockContainer: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+    paddingVertical: 40,
+  },
+  lockIconCircle: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: COLORS.primarySoft,
+    borderWidth: 2,
+    borderColor: COLORS.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 26,
+    position: "relative",
+  },
+  lockBadge: {
+    position: "absolute",
+    right: -3,
+    bottom: 0,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: COLORS.primary,
+    borderWidth: 3,
+    borderColor: COLORS.background,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  lockTitle: {
+    fontSize: 25,
+    fontWeight: "800",
+    color: COLORS.textPrimary,
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  lockSubtitle: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    lineHeight: 22,
+    maxWidth: 340,
+  },
+  lockNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 9,
+    backgroundColor: COLORS.primarySoft,
+    borderWidth: 1,
+    borderColor: COLORS.primaryLight,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginTop: 24,
+  },
+  lockNoticeText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: COLORS.primary,
+  },
+
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -1493,27 +1580,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "800",
     color: COLORS.textSecondary,
-  },
-
-  // ACCESS DENIED
-  lockContainer: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 32,
-  },
-  lockTitle: {
-    fontSize: 21,
-    fontWeight: "800",
-    color: COLORS.textPrimary,
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  lockSubtitle: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    textAlign: "center",
-    lineHeight: 20,
   },
 });
