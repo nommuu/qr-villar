@@ -406,27 +406,51 @@ export default function AdminScreen(): React.JSX.Element {
     return (
       <View style={styles.lockContainer}>
         <View style={styles.lockIconCircle}>
-          <Ionicons name="shield-checkmark" size={54} color={COLORS.primary} />
+          <Ionicons
+            name="shield-checkmark-outline"
+            size={42}
+            color={COLORS.primary}
+          />
+
           <View style={styles.lockBadge}>
-            <Ionicons name="lock-closed" size={18} color="#FFFFFF" />
+            <Ionicons
+              name="lock-closed"
+              size={16}
+              color={COLORS.textOnPrimary}
+            />
           </View>
         </View>
+
+        <Text style={styles.lockEyebrow}>RESTRICTED ACCESS</Text>
 
         <Text style={styles.lockTitle}>Admin Only</Text>
 
         <Text style={styles.lockSubtitle}>
-          This area is restricted to administrators. Please log in with an
-          administrator account to access the QR-ATT Management System.
+          This section is reserved for administrators. Your account does not
+          have permission to manage users, events, attendance records, or system
+          reports.
         </Text>
 
         <View style={styles.lockNotice}>
           <Ionicons
-            name="shield-checkmark-outline"
-            size={18}
+            name="information-circle-outline"
+            size={21}
             color={COLORS.primary}
           />
+
           <Text style={styles.lockNoticeText}>
-            Administrator Access Required
+            Contact your school administrator if you need administrator access.
+          </Text>
+        </View>
+
+        <View style={styles.lockFooter}>
+          <Ionicons
+            name="shield-checkmark-outline"
+            size={15}
+            color={COLORS.textMuted}
+          />
+          <Text style={styles.lockFooterText}>
+            QR-ATT · Protected Administration Workspace
           </Text>
         </View>
       </View>
@@ -1001,6 +1025,7 @@ export default function AdminScreen(): React.JSX.Element {
 
 const styles = StyleSheet.create({
   // ACCESS DENIED
+
   lockContainer: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -1009,31 +1034,43 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     paddingVertical: 40,
   },
+
   lockIconCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 104,
+    height: 104,
+    borderRadius: 52,
     backgroundColor: COLORS.primarySoft,
     borderWidth: 2,
     borderColor: COLORS.primaryLight,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 26,
+    marginBottom: 22,
     position: "relative",
   },
+
   lockBadge: {
     position: "absolute",
     right: -3,
     bottom: 0,
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: COLORS.primary,
     borderWidth: 3,
     borderColor: COLORS.background,
     alignItems: "center",
     justifyContent: "center",
   },
+
+  lockEyebrow: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 2,
+    color: COLORS.primary,
+    marginBottom: 9,
+    textAlign: "center",
+  },
+
   lockTitle: {
     fontSize: 25,
     fontWeight: "800",
@@ -1041,6 +1078,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     textAlign: "center",
   },
+
   lockSubtitle: {
     fontSize: 14,
     color: COLORS.textSecondary,
@@ -1048,23 +1086,42 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     maxWidth: 340,
   },
+
   lockNotice: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 9,
+    gap: 10,
     backgroundColor: COLORS.primarySoft,
     borderWidth: 1,
     borderColor: COLORS.primaryLight,
     borderRadius: 14,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
     marginTop: 24,
+    maxWidth: 360,
+    width: "100%",
   },
+
   lockNoticeText: {
+    flex: 1,
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "600",
     color: COLORS.primary,
+    lineHeight: 19,
+  },
+
+  lockFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    marginTop: 28,
+  },
+
+  lockFooterText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: COLORS.textMuted,
   },
 
   container: {
