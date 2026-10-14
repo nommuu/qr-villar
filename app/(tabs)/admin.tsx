@@ -2,7 +2,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import * as FileSystem from "expo-file-system/legacy";
 import { useFocusEffect } from "expo-router";
 import * as Sharing from "expo-sharing";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   Alert,
   Modal,
@@ -31,7 +31,362 @@ import {
   type Role,
 } from "@/lib/profiles";
 
+type DashboardSection = "users" | "events" | "attendance" | "reports";
+
 export default function AdminScreen(): React.JSX.Element {
+  const { user } = useAuth();
+
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  const sectionPositions = useRef<Record<DashboardSection, number>>({
+    users: 0,
+    events: 0,
+    attendance: 0,
+    reports: 0,
+  });
+
+  const [role, setRole] = useState<Role | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  // USER MANAGEMENT
+  const [users, setUsers] = useState<AdminProfile[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState<boolean>(false);
+  const [updatingUser, setUpdatingUser] = useState<string | null>(null);
+  const [selectedUser, setSelectedUser] = useState<AdminProfile | null>(null);
+  const [showRoleModal, setShowRoleModal] = useState<boolean>(false);
+
+  // EVENT MANAGEMENT
+  const [events, setEvents] = useState<CloudEvent[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState<boolean>(false);
+  const [updatingEvent, setUpdatingEvent] = useState<string | null>(null);
+
+  // ATTENDANCE MANAGEMENT
+  const [attendance, setAttendance] = useState<AdminAttendanceRecord[]>([]);
+  const [loadingAttendance, setLoadingAttendance] = useState<boolean>(false);
+  const [selectedReportEventId, setSelectedReportEventId] =
+    useState<string>("all");
+
+  const [selectedAttendance, setSelectedAttendance] =
+    useState<AdminAttendanceRecord | null>(null);
+  const [showAttendanceModal, setShowAttendanceModal] =
+    useState<boolean>(false);
+  const [selectedStudentId, setSelectedStudentId] = useState<string>("");
+  const [selectedEventId, setSelectedEventId] = useState<string>("");
+  const [updatingAttendance, setUpdatingAttendance] = useState<boolean>(false);
+
+  const filteredAttendance =
+    selectedReportEventId === "all"
+      ? attendance
+      : attendance.filter((record) => record.eventId === selectedReportEventId);
+
+  // QUICK NAVIGATION
+  const recordSectionPosition = useCallback(
+    (section: DashboardSection, y: number): void => {
+      sectionPositions.current[section] = y;
+    },
+    [],
+  );
+
+  const navigateToSection = useCallback((section: DashboardSection): void => {
+    const y = sectionPositions.current[section];
+
+    console.log("Navigating to:", section, "Position:", y);
+
+    scrollViewRef.current?.scrollTo({
+      y: Math.max(y - 12, 0),
+      animated: true,
+    });
+  }, []);
+
+  // LOAD ADMIN ROLE
+  const loadRole = useCallback(async (): Promise<void> => {
+    if (!user) {
+      setRole(null);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const profile = await getProfile(user.id);
+      setRole(profile?.role ?? "student");
+    } catch (error) {
+      console.error("LOAD ROLE ERROR:", error);
+      setRole("student");
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  // LOAD USERS
+  const loadUsers = useCallback(async (): Promise<void> => {
+    setLoadingUsers(true);
+
+    try {
+      const data: AdminProfile[] = await getAllProfiles();
+      setUsers(data);
+    } catch (error) {
+      console.error("LOAD USERS ERROR:", error);
+    } finally {
+      setLoadingUsers(false);
+    }
+  }, []);
+
+  // LOAD EVENTS
+  const loadEvents = useCallback(async (): Promise<void> => {
+    setLoadingEvents(true);
+
+    try {
+      const data: CloudEvent[] = await getAllEvents();
+      setEvents(data);
+    } catch (error) {
+      console.error("LOAD EVENTS ERROR:", error);
+    } finally {
+      setLoadingEvents(false);
+    }
+  }, []);
+
+  // LOAD ATTENDANCE
+  const loadAttendance = useCallback(async (): Promise<void> => {
+    setLoadingAttendance(true);
+
+    try {
+      const data: AdminAttendanceRecord[] = await getAllAttendance();
+      setAttendance(data);
+    } catch (error) {
+      console.error("LOAD ATTENDANCE ERROR:", error);
+    } finally {
+      setLoadingAttendance(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadRole();
+    }, [loadRole]),
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (role === "admin") {
+        void loadUsers();
+        void loadEvents();
+        void loadAttendance();
+      }
+    }, [role, loadUsers, loadEvents, loadAttendance]),
+  );
+
+  // DATE AND TIME
+  const formatDateTime = (dateString: string | null): string => {
+    if (!dateString) {
+      return "Not set";
+    }
+
+    const date = new Date(dateString);
+
+    if (Number.isNaN(date.getTime())) {
+      return dateString;
+    }
+
+    return date.toLocaleString();
+  };
+
+  // USER MANAGEMENT
+  const handleOpenRoleModal = (profile: AdminProfile): void => {
+    setSelectedUser(profile);
+    setShowRoleModal(true);
+  };
+
+  const handleCloseRoleModal = (): void => {
+    setShowRoleModal(false);
+    setSelectedUser(null);
+  };
+
+  const handleChangeRole = async (newRole: Role): Promise<void> => {
+    if (!selectedUser) {
+      return;
+    }
+
+    const userId = selectedUser.id;
+
+    setShowRoleModal(false);
+    setUpdatingUser(userId);
+
+    try {
+      const { error } = await updateUserRole(userId, newRole);
+
+      if (error) {
+        console.error("ROLE UPDATE ERROR:", error);
+        Alert.alert("Update failed", "Unable to update this user's role.");
+        return;
+      }
+
+      setUsers((currentUsers) =>
+        currentUsers.map((currentUser) =>
+          currentUser.id === userId
+            ? { ...currentUser, role: newRole }
+            : currentUser,
+        ),
+      );
+
+      setSelectedUser(null);
+    } catch (error) {
+      console.error("ROLE UPDATE ERROR:", error);
+      Alert.alert("Update failed", "Unable to update this user's role.");
+    } finally {
+      setUpdatingUser(null);
+    }
+  };
+
+  const getRoleLabel = (userRole: Role): string => {
+    if (userRole === "admin") {
+      return "Administrator";
+    }
+
+    if (userRole === "teacher") {
+      return "Teacher";
+    }
+
+    return "Student";
+  };
+
+  // EVENT MANAGEMENT
+  const handleChangeEventStatus = async (
+    event: CloudEvent,
+    newStatus: "open" | "closed",
+  ): Promise<void> => {
+    setUpdatingEvent(event.id);
+
+    try {
+      const { error } = await updateEventStatus(event.id, newStatus);
+
+      if (error) {
+        console.error("EVENT STATUS UPDATE ERROR:", error);
+        Alert.alert("Update failed", "Unable to update the event status.");
+        return;
+      }
+
+      setEvents((currentEvents) =>
+        currentEvents.map((currentEvent) =>
+          currentEvent.id === event.id
+            ? { ...currentEvent, status: newStatus }
+            : currentEvent,
+        ),
+      );
+    } catch (error) {
+      console.error("EVENT STATUS UPDATE ERROR:", error);
+      Alert.alert("Update failed", "Unable to update the event status.");
+    } finally {
+      setUpdatingEvent(null);
+    }
+  };
+
+  // ATTENDANCE MANAGEMENT
+  const handleDeleteAttendance = async (
+    record: AdminAttendanceRecord,
+  ): Promise<void> => {
+    const confirmDelete = (): void => {
+      void performDeleteAttendance(record);
+    };
+
+    if (Platform.OS === "web") {
+      if (
+        typeof window !== "undefined" &&
+        window.confirm(
+          `Delete the attendance record for ${record.studentName || "this student"}?`,
+        )
+      ) {
+        confirmDelete();
+      }
+
+      return;
+    }
+
+    Alert.alert(
+      "Delete attendance",
+      `Delete the attendance record for ${record.studentName || "this student"}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: confirmDelete },
+      ],
+    );
+  };
+
+  const performDeleteAttendance = async (
+    record: AdminAttendanceRecord,
+  ): Promise<void> => {
+    try {
+      const { error } = await deleteAttendance(record.id);
+
+      if (error) {
+        console.error("DELETE ATTENDANCE ERROR:", error);
+        Alert.alert(
+          "Delete failed",
+          "Unable to delete this attendance record.",
+        );
+        return;
+      }
+
+      setAttendance((currentAttendance) =>
+        currentAttendance.filter(
+          (currentRecord) => currentRecord.id !== record.id,
+        ),
+      );
+    } catch (error) {
+      console.error("DELETE ATTENDANCE ERROR:", error);
+      Alert.alert("Delete failed", "Unable to delete this attendance record.");
+    }
+  };
+
+  const handleOpenAttendanceModal = (record: AdminAttendanceRecord): void => {
+    setSelectedAttendance(record);
+    setSelectedStudentId(record.studentId);
+    setSelectedEventId(record.eventId);
+    setShowAttendanceModal(true);
+  };
+
+  const handleCloseAttendanceModal = (): void => {
+    setShowAttendanceModal(false);
+    setSelectedAttendance(null);
+    setSelectedStudentId("");
+    setSelectedEventId("");
+  };
+
+  const handleUpdateAttendance = async (): Promise<void> => {
+    if (!selectedAttendance || !selectedStudentId || !selectedEventId) {
+      return;
+    }
+
+    setUpdatingAttendance(true);
+
+    try {
+      const { error } = await updateAttendance(
+        selectedAttendance.id,
+        selectedStudentId,
+        selectedEventId,
+      );
+
+      if (error) {
+        console.error("UPDATE ATTENDANCE ERROR:", error);
+        Alert.alert(
+          "Update failed",
+          "Unable to update this attendance record.",
+        );
+        return;
+      }
+
+      await loadAttendance();
+      handleCloseAttendanceModal();
+    } catch (error) {
+      console.error("UPDATE ATTENDANCE ERROR:", error);
+      Alert.alert("Update failed", "Unable to update this attendance record.");
+    } finally {
+      setUpdatingAttendance(false);
+    }
+  };
+
+  // EXPORT ATTENDANCE REPORT
   const handleExportAttendance = async (): Promise<void> => {
     if (filteredAttendance.length === 0) {
       if (Platform.OS === "web") {
@@ -44,6 +399,7 @@ export default function AdminScreen(): React.JSX.Element {
           "No attendance records available to export for this filter.",
         );
       }
+
       return;
     }
 
@@ -78,7 +434,7 @@ export default function AdminScreen(): React.JSX.Element {
       const csvContent =
         "\uFEFF" +
         [headers, ...rows]
-          .map((row) => row.map((value) => escapeCsv(value)).join(","))
+          .map((row) => row.map(escapeCsv).join(","))
           .join("\r\n");
 
       const fileName =
@@ -87,7 +443,6 @@ export default function AdminScreen(): React.JSX.Element {
           : "qr-attendance-event-report.csv";
 
       if (Platform.OS === "web") {
-        // Download directly in the browser.
         const blob = new Blob([csvContent], {
           type: "text/csv;charset=utf-8;",
         });
@@ -110,7 +465,6 @@ export default function AdminScreen(): React.JSX.Element {
         return;
       }
 
-      // Save the CSV temporarily on Android or iOS.
       if (!FileSystem.cacheDirectory) {
         throw new Error("File cache directory is unavailable.");
       }
@@ -121,7 +475,6 @@ export default function AdminScreen(): React.JSX.Element {
         encoding: FileSystem.EncodingType.UTF8,
       });
 
-      // Open the native share sheet so the user can save or share the CSV.
       await Sharing.shareAsync(fileUri, {
         mimeType: "text/csv",
         dialogTitle: "Export attendance report",
@@ -141,257 +494,6 @@ export default function AdminScreen(): React.JSX.Element {
         );
       }
     }
-  };
-  const { user } = useAuth();
-
-  const [role, setRole] = useState<Role | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-
-  // USER MANAGEMENT
-  const [users, setUsers] = useState<AdminProfile[]>([]);
-  const [loadingUsers, setLoadingUsers] = useState<boolean>(false);
-  const [updatingUser, setUpdatingUser] = useState<string | null>(null);
-
-  const [selectedUser, setSelectedUser] = useState<AdminProfile | null>(null);
-  const [showRoleModal, setShowRoleModal] = useState<boolean>(false);
-
-  // EVENT MANAGEMENT
-  const [events, setEvents] = useState<CloudEvent[]>([]);
-  const [loadingEvents, setLoadingEvents] = useState<boolean>(false);
-  const [updatingEvent, setUpdatingEvent] = useState<string | null>(null);
-
-  // ATTENDANCE MANAGEMENT
-  const [attendance, setAttendance] = useState<AdminAttendanceRecord[]>([]);
-  const [loadingAttendance, setLoadingAttendance] = useState<boolean>(false);
-  const [selectedReportEventId, setSelectedReportEventId] =
-    useState<string>("all");
-
-  const filteredAttendance =
-    selectedReportEventId === "all"
-      ? attendance
-      : attendance.filter((record) => record.eventId === selectedReportEventId);
-
-  const [selectedAttendance, setSelectedAttendance] =
-    useState<AdminAttendanceRecord | null>(null);
-  const [showAttendanceModal, setShowAttendanceModal] =
-    useState<boolean>(false);
-  const [selectedStudentId, setSelectedStudentId] = useState<string>("");
-  const [selectedEventId, setSelectedEventId] = useState<string>("");
-  const [updatingAttendance, setUpdatingAttendance] = useState<boolean>(false);
-
-  const loadRole = useCallback(async (): Promise<void> => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-
-    const profile = await getProfile(user.id);
-
-    setRole(profile?.role ?? "student");
-    setLoading(false);
-  }, [user]);
-
-  const loadUsers = useCallback(async (): Promise<void> => {
-    setLoadingUsers(true);
-
-    const data: AdminProfile[] = await getAllProfiles();
-
-    setUsers(data);
-    setLoadingUsers(false);
-  }, []);
-
-  const loadEvents = useCallback(async (): Promise<void> => {
-    setLoadingEvents(true);
-
-    const data: CloudEvent[] = await getAllEvents();
-
-    setEvents(data);
-    setLoadingEvents(false);
-  }, []);
-
-  const loadAttendance = useCallback(async (): Promise<void> => {
-    setLoadingAttendance(true);
-
-    const data: AdminAttendanceRecord[] = await getAllAttendance();
-
-    setAttendance(data);
-    setLoadingAttendance(false);
-  }, []);
-
-  const handleDeleteAttendance = async (
-    record: AdminAttendanceRecord,
-  ): Promise<void> => {
-    const { error } = await deleteAttendance(record.id);
-
-    if (error) {
-      console.log("DELETE ATTENDANCE ERROR:", error);
-      return;
-    }
-
-    setAttendance((currentAttendance: AdminAttendanceRecord[]) =>
-      currentAttendance.filter(
-        (currentRecord: AdminAttendanceRecord) =>
-          currentRecord.id !== record.id,
-      ),
-    );
-  };
-
-  const handleOpenAttendanceModal = (record: AdminAttendanceRecord): void => {
-    setSelectedAttendance(record);
-    setSelectedStudentId(record.studentId);
-    setSelectedEventId(record.eventId);
-    setShowAttendanceModal(true);
-  };
-
-  const handleCloseAttendanceModal = (): void => {
-    setShowAttendanceModal(false);
-    setSelectedAttendance(null);
-    setSelectedStudentId("");
-    setSelectedEventId("");
-  };
-
-  const handleUpdateAttendance = async (): Promise<void> => {
-    if (!selectedAttendance || !selectedStudentId || !selectedEventId) {
-      return;
-    }
-
-    setUpdatingAttendance(true);
-
-    const { error } = await updateAttendance(
-      selectedAttendance.id,
-      selectedStudentId,
-      selectedEventId,
-    );
-
-    setUpdatingAttendance(false);
-
-    if (error) {
-      console.log("UPDATE ATTENDANCE ERROR:", error);
-      return;
-    }
-
-    await loadAttendance();
-    handleCloseAttendanceModal();
-  };
-
-  useFocusEffect(
-    useCallback(() => {
-      loadRole();
-    }, [loadRole]),
-  );
-
-  useFocusEffect(
-    useCallback(() => {
-      if (role === "admin") {
-        loadUsers();
-        loadEvents();
-        loadAttendance();
-      }
-    }, [role, loadUsers, loadEvents, loadAttendance]),
-  );
-
-  // USER MANAGEMENT
-
-  const handleOpenRoleModal = (profile: AdminProfile): void => {
-    setSelectedUser(profile);
-    setShowRoleModal(true);
-  };
-
-  const handleCloseRoleModal = (): void => {
-    setShowRoleModal(false);
-    setSelectedUser(null);
-  };
-
-  const handleChangeRole = async (newRole: Role): Promise<void> => {
-    if (!selectedUser) {
-      return;
-    }
-
-    const userId: string = selectedUser.id;
-
-    setShowRoleModal(false);
-    setUpdatingUser(userId);
-
-    const { error } = await updateUserRole(userId, newRole);
-
-    setUpdatingUser(null);
-
-    if (error) {
-      console.log("ROLE UPDATE ERROR:", error);
-      return;
-    }
-
-    setUsers((currentUsers: AdminProfile[]): AdminProfile[] =>
-      currentUsers.map(
-        (currentUser: AdminProfile): AdminProfile =>
-          currentUser.id === userId
-            ? {
-                ...currentUser,
-                role: newRole,
-              }
-            : currentUser,
-      ),
-    );
-
-    setSelectedUser(null);
-  };
-
-  const getRoleLabel = (userRole: Role): string => {
-    if (userRole === "admin") {
-      return "Administrator";
-    }
-
-    if (userRole === "teacher") {
-      return "Teacher";
-    }
-
-    return "Student";
-  };
-
-  // EVENT MANAGEMENT
-
-  const handleChangeEventStatus = async (
-    event: CloudEvent,
-    newStatus: "open" | "closed",
-  ): Promise<void> => {
-    setUpdatingEvent(event.id);
-
-    const { error } = await updateEventStatus(event.id, newStatus);
-
-    setUpdatingEvent(null);
-
-    if (error) {
-      console.log("EVENT STATUS UPDATE ERROR:", error);
-      return;
-    }
-
-    setEvents((currentEvents: CloudEvent[]): CloudEvent[] =>
-      currentEvents.map(
-        (currentEvent: CloudEvent): CloudEvent =>
-          currentEvent.id === event.id
-            ? {
-                ...currentEvent,
-                status: newStatus,
-              }
-            : currentEvent,
-      ),
-    );
-  };
-
-  // DATE AND TIME
-
-  const formatDateTime = (dateString: string | null): string => {
-    if (!dateString) {
-      return "Not set";
-    }
-
-    const date = new Date(dateString);
-
-    if (Number.isNaN(date.getTime())) {
-      return dateString;
-    }
-
-    return date.toLocaleString();
   };
 
   if (loading) {
@@ -460,16 +562,126 @@ export default function AdminScreen(): React.JSX.Element {
   return (
     <>
       <ScrollView
+        ref={scrollViewRef}
         style={styles.container}
         contentContainerStyle={styles.content}
       >
         <Text style={styles.title}>Admin Dashboard</Text>
-
         <Text style={styles.subtitle}>QR-ATT Management System.</Text>
 
-        {/* USER MANAGEMENT */}
+        {/* QUICK NAVIGATION */}
+        <View style={styles.quickNavCard}>
+          <View style={styles.quickNavHeader}>
+            <View>
+              <Text style={styles.quickNavTitle}>Quick Navigation</Text>
+              <Text style={styles.quickNavSubtitle}>
+                Your administration shortcuts
+              </Text>
+            </View>
 
-        <View style={styles.card}>
+            <View style={styles.quickNavHeaderIcon}>
+              <Ionicons name="apps-outline" size={22} color={COLORS.primary} />
+            </View>
+          </View>
+
+          <View style={styles.quickNavGrid}>
+            {/* USERS */}
+            <TouchableOpacity
+              style={[styles.quickNavButton, styles.quickNavUsers]}
+              onPress={() => navigateToSection("users")}
+              activeOpacity={0.75}
+            >
+              <View style={styles.quickNavIconBox}>
+                <Ionicons name="people-outline" size={23} color="#7964D8" />
+              </View>
+
+              <View style={styles.quickNavTextArea}>
+                <Text style={styles.quickNavButtonText}>Users</Text>
+                <Text style={styles.quickNavCount}>
+                  {users.length} accounts
+                </Text>
+              </View>
+
+              <View style={styles.quickNavArrow}>
+                <Ionicons name="arrow-forward" size={16} color="#7964D8" />
+              </View>
+            </TouchableOpacity>
+
+            {/* EVENTS */}
+            <TouchableOpacity
+              style={[styles.quickNavButton, styles.quickNavEvents]}
+              onPress={() => navigateToSection("events")}
+              activeOpacity={0.75}
+            >
+              <View style={styles.quickNavIconBox}>
+                <Ionicons name="calendar-outline" size={23} color="#7964D8" />
+              </View>
+
+              <View style={styles.quickNavTextArea}>
+                <Text style={styles.quickNavButtonText}>Events</Text>
+                <Text style={styles.quickNavCount}>{events.length} events</Text>
+              </View>
+
+              <View style={styles.quickNavArrow}>
+                <Ionicons name="arrow-forward" size={16} color="#7964D8" />
+              </View>
+            </TouchableOpacity>
+
+            {/* ATTENDANCE */}
+            <TouchableOpacity
+              style={[styles.quickNavButton, styles.quickNavAttendance]}
+              onPress={() => navigateToSection("attendance")}
+              activeOpacity={0.75}
+            >
+              <View style={styles.quickNavIconBox}>
+                <Ionicons name="clipboard-outline" size={23} color="#7964D8" />
+              </View>
+
+              <View style={styles.quickNavTextArea}>
+                <Text style={styles.quickNavButtonText}>Attendance</Text>
+                <Text style={styles.quickNavCount}>
+                  {attendance.length} records
+                </Text>
+              </View>
+
+              <View style={styles.quickNavArrow}>
+                <Ionicons name="arrow-forward" size={16} color="#7964D8" />
+              </View>
+            </TouchableOpacity>
+
+            {/* REPORTS */}
+            <TouchableOpacity
+              style={[styles.quickNavButton, styles.quickNavReports]}
+              onPress={() => navigateToSection("reports")}
+              activeOpacity={0.75}
+            >
+              <View style={styles.quickNavIconBox}>
+                <Ionicons
+                  name="stats-chart-outline"
+                  size={23}
+                  color="#7964D8"
+                />
+              </View>
+
+              <View style={styles.quickNavTextArea}>
+                <Text style={styles.quickNavButtonText}>Reports</Text>
+                <Text style={styles.quickNavCount}>Analytics & exports</Text>
+              </View>
+
+              <View style={styles.quickNavArrow}>
+                <Ionicons name="arrow-forward" size={16} color="#7964D8" />
+              </View>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* USER MANAGEMENT */}
+        <View
+          style={styles.card}
+          onLayout={(event) =>
+            recordSectionPosition("users", event.nativeEvent.layout.y)
+          }
+        >
           <Text style={styles.cardTitle}>User Management</Text>
 
           <Text style={styles.cardDescription}>
@@ -488,15 +700,13 @@ export default function AdminScreen(): React.JSX.Element {
             <Text style={styles.emptyText}>No users found.</Text>
           ) : (
             users.map(
-              (profile: AdminProfile): React.JSX.Element => (
+              (profile): React.JSX.Element => (
                 <View key={profile.id} style={styles.userItem}>
                   <View style={styles.userInfo}>
                     <Text style={styles.userName}>
                       {profile.full_name || "No name"}
                     </Text>
-
                     <Text style={styles.userEmail}>{profile.email}</Text>
-
                     <Text style={styles.userId} numberOfLines={1}>
                       ID: {profile.id}
                     </Text>
@@ -529,8 +739,12 @@ export default function AdminScreen(): React.JSX.Element {
         </View>
 
         {/* EVENT MANAGEMENT */}
-
-        <View style={styles.card}>
+        <View
+          style={styles.card}
+          onLayout={(event) =>
+            recordSectionPosition("events", event.nativeEvent.layout.y)
+          }
+        >
           <Text style={styles.cardTitle}>Event Management</Text>
 
           <Text style={styles.cardDescription}>
@@ -548,7 +762,7 @@ export default function AdminScreen(): React.JSX.Element {
           ) : events.length === 0 ? (
             <Text style={styles.emptyText}>No events found.</Text>
           ) : (
-            events.map((event: CloudEvent): React.JSX.Element => {
+            events.map((event): React.JSX.Element => {
               const eventStatus = event.status ?? "open";
               const isUpdating = updatingEvent === event.id;
 
@@ -623,8 +837,12 @@ export default function AdminScreen(): React.JSX.Element {
         </View>
 
         {/* ATTENDANCE MANAGEMENT */}
-
-        <View style={styles.card}>
+        <View
+          style={styles.card}
+          onLayout={(event) =>
+            recordSectionPosition("attendance", event.nativeEvent.layout.y)
+          }
+        >
           <Text style={styles.cardTitle}>Attendance Management</Text>
 
           <Text style={styles.cardDescription}>
@@ -645,7 +863,7 @@ export default function AdminScreen(): React.JSX.Element {
             <Text style={styles.emptyText}>No attendance records found.</Text>
           ) : (
             attendance.map(
-              (record: AdminAttendanceRecord): React.JSX.Element => (
+              (record): React.JSX.Element => (
                 <View key={record.id} style={styles.attendanceItem}>
                   <Text style={styles.attendanceStudent}>
                     {record.studentName || "Unknown student"}
@@ -679,7 +897,7 @@ export default function AdminScreen(): React.JSX.Element {
 
                     <TouchableOpacity
                       style={styles.deleteAttendanceButton}
-                      onPress={() => handleDeleteAttendance(record)}
+                      onPress={() => void handleDeleteAttendance(record)}
                     >
                       <Text style={styles.deleteAttendanceButtonText}>
                         Delete Attendance
@@ -693,8 +911,12 @@ export default function AdminScreen(): React.JSX.Element {
         </View>
 
         {/* REPORTS */}
-
-        <View style={styles.card}>
+        <View
+          style={styles.card}
+          onLayout={(event) =>
+            recordSectionPosition("reports", event.nativeEvent.layout.y)
+          }
+        >
           <Text style={styles.cardTitle}>Reports</Text>
 
           <Text style={styles.cardDescription}>
@@ -723,6 +945,7 @@ export default function AdminScreen(): React.JSX.Element {
 
           {/* EVENT FILTER */}
           <Text style={styles.reportSectionTitle}>Filter by Event</Text>
+
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -747,7 +970,7 @@ export default function AdminScreen(): React.JSX.Element {
               </Text>
             </TouchableOpacity>
 
-            {events.map((event: CloudEvent) => (
+            {events.map((event) => (
               <TouchableOpacity
                 key={event.id}
                 style={[
@@ -773,8 +996,11 @@ export default function AdminScreen(): React.JSX.Element {
 
           {/* EXPORT FILTERED RECORDS */}
           <TouchableOpacity
-            style={styles.exportReportButton}
-            onPress={handleExportAttendance}
+            style={[
+              styles.exportReportButton,
+              filteredAttendance.length === 0 && styles.disabledButton,
+            ]}
+            onPress={() => void handleExportAttendance()}
             disabled={filteredAttendance.length === 0}
           >
             <Text style={styles.exportReportButtonText}>
@@ -798,7 +1024,7 @@ export default function AdminScreen(): React.JSX.Element {
               No attendance records found for this selection.
             </Text>
           ) : (
-            filteredAttendance.map((record: AdminAttendanceRecord) => (
+            filteredAttendance.map((record) => (
               <View key={record.id} style={styles.reportEventItem}>
                 <Text style={styles.reportEventTitle}>
                   {record.studentName || "Unknown student"}
@@ -835,7 +1061,7 @@ export default function AdminScreen(): React.JSX.Element {
                   selectedReportEventId === "all" ||
                   event.id === selectedReportEventId,
               )
-              .map((event: CloudEvent) => {
+              .map((event) => {
                 const eventAttendance = attendance.filter(
                   (record) => record.eventId === event.id,
                 );
@@ -862,10 +1088,9 @@ export default function AdminScreen(): React.JSX.Element {
       </ScrollView>
 
       {/* CHANGE ROLE MODAL */}
-
       <Modal
         visible={showRoleModal}
-        transparent={true}
+        transparent
         animationType="fade"
         onRequestClose={handleCloseRoleModal}
       >
@@ -888,7 +1113,7 @@ export default function AdminScreen(): React.JSX.Element {
             {selectedUser?.role !== "student" && (
               <TouchableOpacity
                 style={styles.modalButton}
-                onPress={() => handleChangeRole("student")}
+                onPress={() => void handleChangeRole("student")}
               >
                 <Text style={styles.modalButtonText}>Student</Text>
               </TouchableOpacity>
@@ -897,7 +1122,7 @@ export default function AdminScreen(): React.JSX.Element {
             {selectedUser?.role !== "teacher" && (
               <TouchableOpacity
                 style={styles.modalButton}
-                onPress={() => handleChangeRole("teacher")}
+                onPress={() => void handleChangeRole("teacher")}
               >
                 <Text style={styles.modalButtonText}>Teacher</Text>
               </TouchableOpacity>
@@ -906,7 +1131,7 @@ export default function AdminScreen(): React.JSX.Element {
             {selectedUser?.role !== "admin" && (
               <TouchableOpacity
                 style={styles.modalButton}
-                onPress={() => handleChangeRole("admin")}
+                onPress={() => void handleChangeRole("admin")}
               >
                 <Text style={styles.modalButtonText}>Administrator</Text>
               </TouchableOpacity>
@@ -923,10 +1148,9 @@ export default function AdminScreen(): React.JSX.Element {
       </Modal>
 
       {/* EDIT ATTENDANCE MODAL */}
-
       <Modal
         visible={showAttendanceModal}
-        transparent={true}
+        transparent
         animationType="fade"
         onRequestClose={handleCloseAttendanceModal}
       >
@@ -940,70 +1164,72 @@ export default function AdminScreen(): React.JSX.Element {
 
             <Text style={styles.formLabel}>Student</Text>
 
-            <ScrollView style={styles.selectionList} nestedScrollEnabled={true}>
-              {users.map(
-                (profile: AdminProfile): React.JSX.Element => (
-                  <TouchableOpacity
-                    key={profile.id}
+            <ScrollView style={styles.selectionList} nestedScrollEnabled>
+              {users.map((profile) => (
+                <TouchableOpacity
+                  key={profile.id}
+                  style={[
+                    styles.selectionButton,
+                    selectedStudentId === profile.id &&
+                      styles.selectionButtonSelected,
+                  ]}
+                  onPress={() => setSelectedStudentId(profile.id)}
+                >
+                  <Text
                     style={[
-                      styles.selectionButton,
+                      styles.selectionButtonText,
                       selectedStudentId === profile.id &&
-                        styles.selectionButtonSelected,
+                        styles.selectionButtonTextSelected,
                     ]}
-                    onPress={() => setSelectedStudentId(profile.id)}
                   >
-                    <Text
-                      style={[
-                        styles.selectionButtonText,
-                        selectedStudentId === profile.id &&
-                          styles.selectionButtonTextSelected,
-                      ]}
-                    >
-                      {profile.full_name || profile.email}
-                    </Text>
-                  </TouchableOpacity>
-                ),
-              )}
+                    {profile.full_name || profile.email}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </ScrollView>
 
             <Text style={styles.formLabel}>Event</Text>
 
-            <ScrollView style={styles.selectionList} nestedScrollEnabled={true}>
-              {events.map(
-                (event: CloudEvent): React.JSX.Element => (
-                  <TouchableOpacity
-                    key={event.id}
+            <ScrollView style={styles.selectionList} nestedScrollEnabled>
+              {events.map((event) => (
+                <TouchableOpacity
+                  key={event.id}
+                  style={[
+                    styles.selectionButton,
+                    selectedEventId === event.id &&
+                      styles.selectionButtonSelected,
+                  ]}
+                  onPress={() => setSelectedEventId(event.id)}
+                >
+                  <Text
                     style={[
-                      styles.selectionButton,
+                      styles.selectionButtonText,
                       selectedEventId === event.id &&
-                        styles.selectionButtonSelected,
+                        styles.selectionButtonTextSelected,
                     ]}
-                    onPress={() => setSelectedEventId(event.id)}
                   >
-                    <Text
-                      style={[
-                        styles.selectionButtonText,
-                        selectedEventId === event.id &&
-                          styles.selectionButtonTextSelected,
-                      ]}
-                    >
-                      {event.title || "Untitled event"}
-                    </Text>
+                    {event.title || "Untitled event"}
+                  </Text>
 
-                    <Text style={styles.selectionSecondaryText}>
-                      Code: {event.event_code}
-                    </Text>
-                  </TouchableOpacity>
-                ),
-              )}
+                  <Text style={styles.selectionSecondaryText}>
+                    Code: {event.event_code}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </ScrollView>
 
             <TouchableOpacity
-              style={styles.modalButton}
+              style={[
+                styles.modalButton,
+                (updatingAttendance ||
+                  !selectedStudentId ||
+                  !selectedEventId) &&
+                  styles.disabledButton,
+              ]}
               disabled={
                 updatingAttendance || !selectedStudentId || !selectedEventId
               }
-              onPress={handleUpdateAttendance}
+              onPress={() => void handleUpdateAttendance()}
             >
               <Text style={styles.modalButtonText}>
                 {updatingAttendance ? "Updating..." : "Save Changes"}
@@ -1024,8 +1250,126 @@ export default function AdminScreen(): React.JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  // ACCESS DENIED
+  quickNavCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    padding: 18,
+    marginBottom: 22,
+    borderWidth: 1,
+    borderColor: "#E9E2FA",
+    shadowColor: "#8B78C9",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.07,
+    shadowRadius: 14,
+    elevation: 3,
+  },
 
+  quickNavHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 18,
+  },
+
+  quickNavTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#30264A",
+    marginBottom: 5,
+  },
+
+  quickNavSubtitle: {
+    fontSize: 12,
+    color: "#8A819F",
+  },
+
+  quickNavHeaderIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 15,
+    backgroundColor: "#F0EBFF",
+    borderWidth: 1,
+    borderColor: "#E4DAFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  quickNavGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+
+  quickNavButton: {
+    width: "48%",
+    flexGrow: 1,
+    flexBasis: "40%",
+    minHeight: 112,
+    padding: 13,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#E9E2FA",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  quickNavUsers: {
+    backgroundColor: "#F5F1FF",
+  },
+
+  quickNavEvents: {
+    backgroundColor: "#F0EEFF",
+  },
+
+  quickNavAttendance: {
+    backgroundColor: "#F7F2FF",
+  },
+
+  quickNavReports: {
+    backgroundColor: "#EEE8FF",
+  },
+
+  quickNavIconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E6DEFA",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  quickNavTextArea: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  quickNavButtonText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#392D57",
+    marginBottom: 5,
+  },
+
+  quickNavCount: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#8779A5",
+    lineHeight: 15,
+  },
+
+  quickNavArrow: {
+    width: 27,
+    height: 27,
+    borderRadius: 10,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // ACCESS DENIED
   lockContainer: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -1034,7 +1378,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     paddingVertical: 40,
   },
-
   lockIconCircle: {
     width: 104,
     height: 104,
@@ -1047,7 +1390,6 @@ const styles = StyleSheet.create({
     marginBottom: 22,
     position: "relative",
   },
-
   lockBadge: {
     position: "absolute",
     right: -3,
@@ -1061,7 +1403,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
   lockEyebrow: {
     fontSize: 11,
     fontWeight: "800",
@@ -1070,7 +1411,6 @@ const styles = StyleSheet.create({
     marginBottom: 9,
     textAlign: "center",
   },
-
   lockTitle: {
     fontSize: 25,
     fontWeight: "800",
@@ -1078,7 +1418,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     textAlign: "center",
   },
-
   lockSubtitle: {
     fontSize: 14,
     color: COLORS.textSecondary,
@@ -1086,7 +1425,6 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     maxWidth: 340,
   },
-
   lockNotice: {
     flexDirection: "row",
     alignItems: "center",
@@ -1101,7 +1439,6 @@ const styles = StyleSheet.create({
     maxWidth: 360,
     width: "100%",
   },
-
   lockNoticeText: {
     flex: 1,
     fontSize: 12,
@@ -1109,7 +1446,6 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     lineHeight: 19,
   },
-
   lockFooter: {
     flexDirection: "row",
     alignItems: "center",
@@ -1117,13 +1453,13 @@ const styles = StyleSheet.create({
     gap: 7,
     marginTop: 28,
   },
-
   lockFooterText: {
     fontSize: 11,
     fontWeight: "600",
     color: COLORS.textMuted,
   },
 
+  // LAYOUT
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -1201,6 +1537,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
     lineHeight: 19,
+  },
+  disabledButton: {
+    opacity: 0.5,
   },
 
   // USER MANAGEMENT

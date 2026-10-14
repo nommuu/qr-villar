@@ -149,16 +149,21 @@ export async function getAttendanceHistory(
     .from("attendance")
     .select(
       `
+    id,
+    student_id,
+    event_id,
+    scanned_at,
+    student_profile:profiles!attendance_student_profile_fkey (
       id,
-      event_id,
-      scanned_at,
-      events (
-        title,
-        event_code
-      )
-    `,
+      full_name,
+      email
+    ),
+    events (
+      title,
+      event_code
     )
-    .eq("student_id", studentId)
+  `,
+    )
     .order("scanned_at", { ascending: false });
 
   if (error) {
@@ -168,9 +173,13 @@ export async function getAttendanceHistory(
 
   return (data ?? []).map((row: any) => ({
     id: row.id,
+    studentId: row.student_id,
     eventId: row.event_id,
-    eventTitle: row.events?.title ?? "Unknown event",
     scannedAt: row.scanned_at,
+    studentName: row.student_profile?.full_name ?? null,
+    studentEmail: row.student_profile?.email ?? null,
+    eventTitle: row.events?.title ?? null,
+    eventCode: row.events?.event_code ?? null,
   }));
 }
 
@@ -278,7 +287,8 @@ export async function getAllAttendance(): Promise<AdminAttendanceRecord[]> {
       student_id,
       event_id,
       scanned_at,
-      profiles (
+      student_profile:profiles!attendance_student_profile_fkey (
+        id,
         full_name,
         email
       ),
@@ -291,17 +301,24 @@ export async function getAllAttendance(): Promise<AdminAttendanceRecord[]> {
     .order("scanned_at", { ascending: false });
 
   if (error) {
-    console.error("GET ALL ATTENDANCE ERROR:", error.message);
+    console.error("GET ALL ATTENDANCE ERROR:", {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
     return [];
   }
+
+  console.log("ADMIN ATTENDANCE RAW DATA:", data);
 
   return (data ?? []).map((row: any) => ({
     id: row.id,
     studentId: row.student_id,
     eventId: row.event_id,
     scannedAt: row.scanned_at,
-    studentName: row.profiles?.full_name ?? null,
-    studentEmail: row.profiles?.email ?? null,
+    studentName: row.student_profile?.full_name ?? null,
+    studentEmail: row.student_profile?.email ?? null,
     eventTitle: row.events?.title ?? null,
     eventCode: row.events?.event_code ?? null,
   }));
@@ -318,7 +335,7 @@ export async function deleteAttendance(
     .eq("id", attendanceId);
 
   if (error) {
-    console.error("DELETE ATTENDANCE ERROR:", error.message);
+    console.error("DELETE ATTENDANCE ERROR:", error);
   }
 
   return { error };

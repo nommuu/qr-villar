@@ -10,18 +10,23 @@ import {
 } from "react-native";
 
 import { COLORS } from "@/constants/colors";
+
 import {
+  getAllAttendance,
   getAttendanceHistory,
   getTeacherEventAttendance,
+  type AdminAttendanceRecord,
   type AttendanceRecord,
   type TeacherEventAttendance,
 } from "@/lib/attendance";
+
 import { useAuth } from "@/lib/auth";
 import { getProfile, type Role } from "@/lib/profiles";
 
 export default function HistoryScreen() {
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
+  const [adminRecords, setAdminRecords] = useState<AdminAttendanceRecord[]>([]);
 
   const [role, setRole] = useState<Role | null>(null);
   const [studentRecords, setStudentRecords] = useState<AttendanceRecord[]>([]);
@@ -46,14 +51,21 @@ export default function HistoryScreen() {
 
       setRole(currentRole);
 
-      if (currentRole === "teacher") {
+      if (currentRole === "admin") {
+        const records = await getAllAttendance();
+        setAdminRecords(records);
+        setStudentRecords([]);
+        setTeacherEvents([]);
+      } else if (currentRole === "teacher") {
         const events = await getTeacherEventAttendance(user.id);
         setTeacherEvents(events);
         setStudentRecords([]);
+        setAdminRecords([]);
       } else {
         const records = await getAttendanceHistory(user.id);
         setStudentRecords(records);
         setTeacherEvents([]);
+        setAdminRecords([]);
       }
     } catch {
       setStudentRecords([]);
