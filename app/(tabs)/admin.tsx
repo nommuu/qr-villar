@@ -1252,30 +1252,30 @@ export default function AdminScreen(): React.JSX.Element {
 const styles = StyleSheet.create({
   quickNavCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 24,
-    padding: 18,
-    marginBottom: 22,
+    borderRadius: 22,
+    padding: 14,
+    marginBottom: 20,
     borderWidth: 1,
     borderColor: "#E9E2FA",
     shadowColor: "#8B78C9",
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.07,
-    shadowRadius: 14,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
   },
 
   quickNavHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 18,
+    marginBottom: 16,
   },
 
   quickNavTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "800",
     color: "#30264A",
-    marginBottom: 5,
+    marginBottom: 4,
   },
 
   quickNavSubtitle: {
@@ -1284,12 +1284,10 @@ const styles = StyleSheet.create({
   },
 
   quickNavHeaderIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 15,
+    width: 40,
+    height: 40,
+    borderRadius: 13,
     backgroundColor: "#F0EBFF",
-    borderWidth: 1,
-    borderColor: "#E4DAFF",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1297,20 +1295,21 @@ const styles = StyleSheet.create({
   quickNavGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 12,
+    gap: 10,
   },
 
   quickNavButton: {
     width: "48%",
     flexGrow: 1,
     flexBasis: "40%",
-    minHeight: 112,
-    padding: 13,
-    borderRadius: 18,
+    minHeight: 104,
+    padding: 12,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#E9E2FA",
-    flexDirection: "row",
-    alignItems: "center",
+    borderColor: "#E5DAFA",
+    flexDirection: "column",
+    alignItems: "stretch",
+    justifyContent: "space-between",
     gap: 10,
   },
 
@@ -1319,7 +1318,7 @@ const styles = StyleSheet.create({
   },
 
   quickNavEvents: {
-    backgroundColor: "#F0EEFF",
+    backgroundColor: "#F1EDFF",
   },
 
   quickNavAttendance: {
@@ -1331,9 +1330,9 @@ const styles = StyleSheet.create({
   },
 
   quickNavIconBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#E6DEFA",
@@ -1350,20 +1349,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "800",
     color: "#392D57",
-    marginBottom: 5,
+    marginBottom: 4,
   },
 
   quickNavCount: {
     fontSize: 10,
     fontWeight: "600",
     color: "#8779A5",
-    lineHeight: 15,
+    lineHeight: 14,
   },
 
   quickNavArrow: {
-    width: 27,
-    height: 27,
-    borderRadius: 10,
+    position: "absolute",
+    top: 16,
+    right: 12,
+    width: 24,
+    height: 24,
+    borderRadius: 8,
     backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
