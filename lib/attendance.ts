@@ -14,47 +14,44 @@ export type AttendanceRecord = {
   id: string;
   eventId: string;
   eventTitle: string;
-  scannedAt: string;
-};
-
-export type TeacherEventAttendance = {
-  eventId: string;
-  eventCode: string;
-  title: string;
-  startTime: string | null;
-  endTime: string | null;
-  attendeeCount: number;
-  attendees: {
-    studentId: string;
-    studentName?: string | null;
-    scannedAt: string;
-  }[];
-};
-
-export type TeacherEventSummary = {
-  eventId: string;
-  eventCode: string;
-  title: string;
-  attendeeCount: number;
-};
-
-export type AdminAttendanceRecord = {
-  id: string;
   studentId: string;
-  eventId: string;
   scannedAt: string;
-  studentName: string | null;
-  studentEmail: string | null;
-  eventTitle: string | null;
-  eventCode: string | null;
 };
 
-type TeacherAttendeeRPCRow = {
-  event_id: string;
-  student_id: string;
-  student_name: string | null;
-  scanned_at: string;
-};
+/* -------------------- DATE HANDLING -------------------- */
+
+// Treat timestamps without a timezone as Philippine time (UTC+8).
+// Timestamps that already contain Z or a timezone offset are
+// interpreted according to that timezone.
+function parseEventDate(value: string | null): Date | null {
+  if (!value) {
+    return null;
+  }
+
+  const localMatch = value.match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?$/,
+  );
+
+  if (localMatch) {
+    const year = Number(localMatch[1]);
+    const month = Number(localMatch[2]);
+    const day = Number(localMatch[3]);
+    const hour = Number(localMatch[4]);
+    const minute = Number(localMatch[5]);
+    const second = Number(localMatch[6] ?? 0);
+    const fraction = localMatch[7] ?? "";
+    const millisecond = Number(fraction.padEnd(3, "0").slice(0, 3));
+
+    const utcTime =
+      Date.UTC(year, month - 1, day, hour, minute, second, millisecond) -
+      8 * 60 * 60 * 1000;
+
+    return new Date(utcTime);
+  }
+
+  // Preserve an explicit timezone, such as Z or +08:00.
+  return new Date(value);
+}
 
 /* -------------------- REGISTER ATTENDANCE -------------------- */
 
@@ -83,9 +80,34 @@ export async function registerAttendance(
     }
 
     const now = new Date();
-    const start = event.start_time ? new Date(event.start_time) : null;
-    const end = event.end_time ? new Date(event.end_time) : null;
+    const start = parseEventDate(event.start_time);
+    const end = parseEventDate(event.end_time);
 
+    // Debug information for checking event time mismatches.
+    console.log("ATTENDANCE TIME CHECK:", {
+      eventTitle: event.title,
+      nowISO: now.toISOString(),
+      nowLocal: now.toString(),
+      rawStart: event.start_time,
+      parsedStartISO: start?.toISOString() ?? null,
+      rawEnd: event.end_time,
+      parsedEndISO: end?.toISOString() ?? null,
+      blocked: start ? now < start : false,
+    });
+
+    // Prevent registration if the stored event dates are invalid.
+    if (
+      (event.start_time && (!start || Number.isNaN(start.getTime()))) ||
+      (event.end_time && (!end || Number.isNaN(end.getTime())))
+    ) {
+      return {
+        success: false,
+        message:
+          "The event schedule is invalid. Please contact the administrator.",
+      };
+    }
+
+    // Check whether the event has started.
     if (start && now < start) {
       return {
         success: false,
@@ -93,6 +115,7 @@ export async function registerAttendance(
       };
     }
 
+    // Check whether the event has ended.
     if (end && now > end) {
       return {
         success: false,
@@ -100,6 +123,7 @@ export async function registerAttendance(
       };
     }
 
+    // Register the student's attendance.
     const { error } = await supabase.from("attendance").insert({
       student_id: studentId,
       event_id: event.id,
@@ -138,227 +162,4 @@ export async function registerAttendance(
           : "Unable to register attendance.",
     };
   }
-}
-
-/* -------------------- STUDENT HISTORY -------------------- */
-
-export async function getAttendanceHistory(
-  studentId: string,
-): Promise<AttendanceRecord[]> {
-  const { data, error } = await supabase
-    .from("attendance")
-    .select(
-      `
-    id,
-    student_id,
-    event_id,
-    scanned_at,
-    student_profile:profiles!attendance_student_profile_fkey (
-      id,
-      full_name,
-      email
-    ),
-    events (
-      title,
-      event_code
-    )
-  `,
-    )
-    .order("scanned_at", { ascending: false });
-
-  if (error) {
-    console.error("GET ATTENDANCE HISTORY ERROR:", error.message);
-    return [];
-  }
-
-  return (data ?? []).map((row: any) => ({
-    id: row.id,
-    studentId: row.student_id,
-    eventId: row.event_id,
-    scannedAt: row.scanned_at,
-    studentName: row.student_profile?.full_name ?? null,
-    studentEmail: row.student_profile?.email ?? null,
-    eventTitle: row.events?.title ?? null,
-    eventCode: row.events?.event_code ?? null,
-  }));
-}
-
-/* -------------------- TEACHER EVENT ATTENDANCE -------------------- */
-
-export async function getTeacherEventAttendance(
-  teacherId: string,
-): Promise<TeacherEventAttendance[]> {
-  const { data: events, error: eventError } = await supabase
-    .from("events")
-    .select("id, event_code, title, start_time, end_time")
-    .eq("created_by", teacherId)
-    .order("created_at", { ascending: false });
-
-  if (eventError || !events) {
-    console.error("GET TEACHER EVENTS ERROR:", eventError?.message);
-    return [];
-  }
-
-  if (events.length === 0) {
-    return [];
-  }
-
-  const { data: attendeeRows, error: attendeeError } = await supabase.rpc(
-    "get_teacher_event_attendees",
-  );
-
-  console.log("TEACHER ID:", teacherId);
-  console.log("RPC ATTENDEE DATA:", attendeeRows);
-  console.log("RPC ATTENDEE ERROR:", attendeeError);
-
-  if (attendeeError) {
-    console.error("GET TEACHER EVENT ATTENDEES ERROR:", attendeeError.message);
-    return events.map((event) => ({
-      eventId: event.id,
-      eventCode: event.event_code,
-      title: event.title,
-      startTime: event.start_time,
-      endTime: event.end_time,
-      attendeeCount: 0,
-      attendees: [],
-    }));
-  }
-
-  const rows = (attendeeRows ?? []) as TeacherAttendeeRPCRow[];
-  const attendeesByEvent = new Map<
-    string,
-    TeacherEventAttendance["attendees"]
-  >();
-
-  for (const row of rows) {
-    if (!row.event_id || !row.student_id) {
-      continue;
-    }
-
-    const attendees = attendeesByEvent.get(row.event_id) ?? [];
-
-    attendees.push({
-      studentId: row.student_id,
-      studentName: row.student_name,
-      scannedAt: row.scanned_at,
-    });
-
-    attendeesByEvent.set(row.event_id, attendees);
-  }
-
-  return events.map((event) => {
-    const attendees = attendeesByEvent.get(event.id) ?? [];
-
-    return {
-      eventId: event.id,
-      eventCode: event.event_code,
-      title: event.title,
-      startTime: event.start_time,
-      endTime: event.end_time,
-      attendeeCount: attendees.length,
-      attendees,
-    };
-  });
-}
-
-/* -------------------- TEACHER EVENT SUMMARY -------------------- */
-
-export async function getTeacherEventSummary(
-  teacherId: string,
-): Promise<TeacherEventSummary[]> {
-  const events = await getTeacherEventAttendance(teacherId);
-
-  return events.map((event) => ({
-    eventId: event.eventId,
-    eventCode: event.eventCode,
-    title: event.title,
-    attendeeCount: event.attendeeCount,
-  }));
-}
-
-/* -------------------- ADMIN ATTENDANCE -------------------- */
-
-export async function getAllAttendance(): Promise<AdminAttendanceRecord[]> {
-  const { data, error } = await supabase
-    .from("attendance")
-    .select(
-      `
-      id,
-      student_id,
-      event_id,
-      scanned_at,
-      student_profile:profiles!attendance_student_profile_fkey (
-        id,
-        full_name,
-        email
-      ),
-      events (
-        title,
-        event_code
-      )
-    `,
-    )
-    .order("scanned_at", { ascending: false });
-
-  if (error) {
-    console.error("GET ALL ATTENDANCE ERROR:", {
-      message: error.message,
-      code: error.code,
-      details: error.details,
-      hint: error.hint,
-    });
-    return [];
-  }
-
-  console.log("ADMIN ATTENDANCE RAW DATA:", data);
-
-  return (data ?? []).map((row: any) => ({
-    id: row.id,
-    studentId: row.student_id,
-    eventId: row.event_id,
-    scannedAt: row.scanned_at,
-    studentName: row.student_profile?.full_name ?? null,
-    studentEmail: row.student_profile?.email ?? null,
-    eventTitle: row.events?.title ?? null,
-    eventCode: row.events?.event_code ?? null,
-  }));
-}
-
-/* -------------------- DELETE ATTENDANCE -------------------- */
-
-export async function deleteAttendance(
-  attendanceId: string,
-): Promise<{ error: unknown | null }> {
-  const { error } = await supabase
-    .from("attendance")
-    .delete()
-    .eq("id", attendanceId);
-
-  if (error) {
-    console.error("DELETE ATTENDANCE ERROR:", error);
-  }
-
-  return { error };
-}
-
-/* -------------------- UPDATE ATTENDANCE -------------------- */
-
-export async function updateAttendance(
-  attendanceId: string,
-  studentId: string,
-  eventId: string,
-): Promise<{ error: unknown | null }> {
-  const { error } = await supabase
-    .from("attendance")
-    .update({
-      student_id: studentId,
-      event_id: eventId,
-    })
-    .eq("id", attendanceId);
-
-  if (error) {
-    console.error("UPDATE ATTENDANCE ERROR:", error.message);
-  }
-
-  return { error };
 }
