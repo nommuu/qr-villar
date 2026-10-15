@@ -3,10 +3,11 @@ import { Link, router } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Keyboard,
   KeyboardAvoidingView,
+  Modal,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,8 +22,7 @@ import AppButton from "@/components/AppButton";
 import Header from "@/components/Header";
 import { COLORS } from "@/constants/colors";
 import { signUp } from "@/lib/auth";
-
-type Role = "student" | "teacher";
+import { submitTeacherVerification } from "@/lib/verification";
 
 export default function RegisterScreen() {
   const insets = useSafeAreaInsets();
@@ -31,12 +31,27 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [role, setRole] = useState<Role>("student");
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const [verificationSubmitting, setVerificationSubmitting] = useState(false);
+  const [verificationModalVisible, setVerificationModalVisible] =
+    useState(false);
+  const [teacherDetails, setTeacherDetails] = useState("");
+  const [verificationRequiresSignIn, setVerificationRequiresSignIn] =
+    useState(false);
+  const [verificationNotice, setVerificationNotice] = useState<string | null>(
+    null,
+  );
+
+  const clearError = () => {
+    if (error) setError(null);
+  };
 
   const handleRegister = async () => {
     if (loading) return;
@@ -84,8 +99,104 @@ export default function RegisterScreen() {
     }
   };
 
-  const clearError = () => {
-    if (error) setError(null);
+  const closeVerificationModal = () => {
+    if (verificationSubmitting) return;
+
+    setVerificationModalVisible(false);
+    setTeacherDetails("");
+    setError(null);
+    setVerificationRequiresSignIn(false);
+  };
+
+  const goToSignIn = () => {
+    if (verificationSubmitting) return;
+
+    setVerificationModalVisible(false);
+    setTeacherDetails("");
+    setError(null);
+    setVerificationRequiresSignIn(false);
+    router.push("/login");
+  };
+
+  const handleVerificationSubmit = async () => {
+    if (verificationSubmitting) return;
+
+    const details = teacherDetails.trim();
+
+    if (!details) {
+      setError("Please enter your teacher details.");
+      return;
+    }
+
+    setError(null);
+    setVerificationRequiresSignIn(false);
+    setVerificationSubmitting(true);
+
+    try {
+      const { data, error: requestError } =
+        await submitTeacherVerification(details);
+
+      if (requestError) {
+        const message = requestError.message;
+        const lowerMessage = message.toLowerCase();
+
+        if ("code" in requestError && requestError.code === "23505") {
+          setError("You already have a pending teacher verification request.");
+          return;
+        }
+
+        if (
+          lowerMessage.includes("session") ||
+          lowerMessage.includes("sign in") ||
+          lowerMessage.includes("authenticated user") ||
+          lowerMessage.includes("not authenticated") ||
+          lowerMessage.includes("authsessionmissing")
+        ) {
+          setVerificationRequiresSignIn(true);
+          setError(
+            "You're not signed in. Sign in to your existing account before submitting a teacher verification request. If you just registered, confirm your email first if required.",
+          );
+          return;
+        }
+
+        setError(message);
+        return;
+      }
+
+      setVerificationModalVisible(false);
+      setTeacherDetails("");
+      setError(null);
+      setVerificationRequiresSignIn(false);
+
+      const message = `Your teacher verification request was submitted successfully. Status: ${
+        data?.status ?? "pending"
+      }. An admin must review it before your account role can change.`;
+
+      if (Platform.OS === "web") {
+        setVerificationNotice(message);
+      } else {
+        Alert.alert("Request Submitted", message);
+      }
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Unable to submit your request. Please try again.";
+
+      if (
+        message.toLowerCase().includes("session") ||
+        message.toLowerCase().includes("authsessionmissing")
+      ) {
+        setVerificationRequiresSignIn(true);
+        setError(
+          "You're not signed in. Please sign in to your existing account before submitting your request.",
+        );
+      } else {
+        setError(message);
+      }
+    } finally {
+      setVerificationSubmitting(false);
+    }
   };
 
   return (
@@ -324,120 +435,18 @@ export default function RegisterScreen() {
                   </View>
                 </View>
 
-                <View style={styles.roleSection}>
-                  <Text style={styles.label}>Account type</Text>
-                  <Text style={styles.roleHint}>
-                    All new accounts start as Students. Teacher access requires
-                    verification by the Admin.
-                  </Text>
-
-                  <View style={styles.roleRow}>
-                    <Pressable
-                      accessibilityRole="radio"
-                      accessibilityState={{ selected: role === "student" }}
-                      disabled={loading}
-                      onPress={() => setRole("student")}
-                      style={[
-                        styles.roleCard,
-                        role === "student" && styles.roleCardActive,
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.roleIcon,
-                          role === "student" && styles.roleIconActive,
-                        ]}
-                      >
-                        <Ionicons
-                          name="school-outline"
-                          size={23}
-                          color={
-                            role === "student"
-                              ? COLORS.textOnPrimary
-                              : COLORS.primary
-                          }
-                        />
-                      </View>
-
-                      <Text
-                        style={[
-                          styles.roleTitle,
-                          role === "student" && styles.roleTitleActive,
-                        ]}
-                      >
-                        Student
-                      </Text>
-                      <Text style={styles.roleDescription}>
-                        Scan QR codes and view attendance
-                      </Text>
-
-                      <View style={styles.radioOuter}>
-                        {role === "student" && (
-                          <View style={styles.radioInner} />
-                        )}
-                      </View>
-                    </Pressable>
-
-                    <Pressable
-                      accessibilityRole="radio"
-                      accessibilityState={{ selected: role === "teacher" }}
-                      disabled={loading}
-                      onPress={() => setRole("teacher")}
-                      style={[
-                        styles.roleCard,
-                        role === "teacher" && styles.roleCardActive,
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.roleIcon,
-                          role === "teacher" && styles.roleIconActive,
-                        ]}
-                      >
-                        <Ionicons
-                          name="easel-outline"
-                          size={23}
-                          color={
-                            role === "teacher"
-                              ? COLORS.textOnPrimary
-                              : COLORS.primary
-                          }
-                        />
-                      </View>
-
-                      <Text
-                        style={[
-                          styles.roleTitle,
-                          role === "teacher" && styles.roleTitleActive,
-                        ]}
-                      >
-                        Teacher
-                      </Text>
-                      <Text style={styles.roleDescription}>
-                        Requires Admin verification
-                      </Text>
-
-                      <View style={styles.radioOuter}>
-                        {role === "teacher" && (
-                          <View style={styles.radioInner} />
-                        )}
-                      </View>
-                    </Pressable>
-                  </View>
-
-                  <View style={styles.registrationNotice}>
+                {verificationNotice ? (
+                  <View style={styles.verificationSuccessContainer}>
                     <Ionicons
-                      name="information-circle-outline"
-                      size={22}
-                      color={COLORS.primary}
+                      name="checkmark-circle-outline"
+                      size={20}
+                      color={COLORS.success}
                     />
-                    <Text style={styles.registrationNoticeText}>
-                      New accounts are registered as Students. If you're a
-                      Teacher, create your account first, then request teacher
-                      verification from the Admin to receive Teacher access.
+                    <Text style={styles.verificationSuccessText}>
+                      {verificationNotice}
                     </Text>
                   </View>
-                </View>
+                ) : null}
 
                 {error ? (
                   <View style={styles.errorContainer}>
@@ -494,6 +503,128 @@ export default function RegisterScreen() {
           </ScrollView>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={verificationModalVisible}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={closeVerificationModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeaderRow}>
+              <View style={styles.modalIcon}>
+                <Ionicons
+                  name="shield-checkmark-outline"
+                  size={28}
+                  color={COLORS.primary}
+                />
+              </View>
+
+              <TouchableOpacity
+                onPress={closeVerificationModal}
+                style={styles.modalCloseButton}
+                disabled={verificationSubmitting}
+                accessibilityRole="button"
+                accessibilityLabel="Close verification form"
+              >
+                <Ionicons name="close" size={22} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalTitle}>Teacher Verification</Text>
+            <Text style={styles.modalDescription}>
+              Tell the admin about your teaching role. Your account will remain
+              a student account until an admin approves your request. You must
+              be signed in to submit this form.
+            </Text>
+
+            <Text style={styles.label}>Teacher details</Text>
+            <TextInput
+              style={[styles.modalInput, styles.modalTextArea]}
+              value={teacherDetails}
+              onChangeText={(value) => {
+                setTeacherDetails(value);
+                clearError();
+                setVerificationRequiresSignIn(false);
+              }}
+              placeholder="Department, position, or other details"
+              placeholderTextColor={COLORS.textMuted}
+              multiline
+              textAlignVertical="top"
+              editable={!verificationSubmitting}
+              accessibilityLabel="Teacher details"
+            />
+
+            {error ? (
+              <View style={styles.errorContainer}>
+                <Ionicons
+                  name="alert-circle-outline"
+                  size={19}
+                  color={COLORS.danger}
+                />
+                <Text style={styles.error}>{error}</Text>
+              </View>
+            ) : null}
+
+            {verificationRequiresSignIn ? (
+              <TouchableOpacity
+                style={styles.modalPrimaryButton}
+                onPress={goToSignIn}
+                disabled={verificationSubmitting}
+                accessibilityRole="button"
+              >
+                <Text style={styles.modalPrimaryButtonText}>Go to Sign In</Text>
+              </TouchableOpacity>
+            ) : null}
+
+            <View style={styles.modalInfo}>
+              <Ionicons
+                name="information-circle-outline"
+                size={19}
+                color={COLORS.primary}
+              />
+              <Text style={styles.modalInfoText}>
+                Submitting a request does not immediately change your account
+                role.
+              </Text>
+            </View>
+
+            {!verificationRequiresSignIn ? (
+              <TouchableOpacity
+                style={[
+                  styles.modalPrimaryButton,
+                  verificationSubmitting && styles.disabledButton,
+                ]}
+                onPress={handleVerificationSubmit}
+                disabled={verificationSubmitting}
+                accessibilityRole="button"
+              >
+                {verificationSubmitting ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={COLORS.textOnPrimary}
+                  />
+                ) : (
+                  <Text style={styles.modalPrimaryButtonText}>
+                    Submit Verification Request
+                  </Text>
+                )}
+              </TouchableOpacity>
+            ) : null}
+
+            <TouchableOpacity
+              style={styles.modalCancelButton}
+              onPress={closeVerificationModal}
+              disabled={verificationSubmitting}
+              accessibilityRole="button"
+            >
+              <Text style={styles.modalCancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -503,23 +634,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-
   keyboardView: {
     flex: 1,
   },
-
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 24,
     paddingTop: 18,
     paddingBottom: 28,
   },
-
   headerContainer: {
     alignItems: "center",
     marginBottom: 28,
   },
-
   brandIcon: {
     width: 70,
     height: 70,
@@ -534,7 +661,6 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 4,
   },
-
   brandBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -545,18 +671,15 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     marginTop: 10,
   },
-
   brandBadgeText: {
     color: COLORS.primary,
     fontSize: 9,
     fontWeight: "800",
     letterSpacing: 1,
   },
-
   welcomeSection: {
     marginBottom: 22,
   },
-
   eyebrow: {
     color: COLORS.primary,
     fontSize: 11,
@@ -564,7 +687,6 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     marginBottom: 8,
   },
-
   title: {
     fontSize: 28,
     lineHeight: 35,
@@ -572,13 +694,11 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     marginBottom: 8,
   },
-
   subtitle: {
     fontSize: 14,
     lineHeight: 22,
     color: COLORS.textSecondary,
   },
-
   formCard: {
     backgroundColor: COLORS.card,
     borderRadius: 24,
@@ -591,32 +711,27 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     elevation: 2,
   },
-
   formTitle: {
     fontSize: 21,
     fontWeight: "800",
     color: COLORS.textPrimary,
     marginBottom: 6,
   },
-
   formSubtitle: {
     fontSize: 13,
     lineHeight: 19,
     color: COLORS.textSecondary,
     marginBottom: 20,
   },
-
   fieldGroup: {
     marginBottom: 16,
   },
-
   label: {
     fontSize: 13,
     fontWeight: "700",
     color: COLORS.textPrimary,
     marginBottom: 8,
   },
-
   inputWrapper: {
     minHeight: 53,
     flexDirection: "row",
@@ -627,11 +742,9 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     paddingHorizontal: 13,
   },
-
   inputIcon: {
     marginRight: 10,
   },
-
   input: {
     flex: 1,
     minWidth: 0,
@@ -639,119 +752,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.textPrimary,
   },
-
   passwordToggle: {
     padding: 5,
     marginLeft: 3,
   },
-
-  roleSection: {
-    marginTop: 2,
-    marginBottom: 15,
-  },
-
-  roleHint: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: -2,
-    marginBottom: 12,
-  },
-
-  roleRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-
-  roleCard: {
-    flex: 1,
-    minWidth: 0,
-    alignItems: "center",
-    backgroundColor: COLORS.background,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 17,
-    paddingHorizontal: 10,
-    paddingTop: 15,
-    paddingBottom: 13,
-  },
-
-  roleCardActive: {
-    backgroundColor: COLORS.primarySoft,
-    borderColor: COLORS.primary,
-    borderWidth: 1.5,
-  },
-
-  roleIcon: {
-    width: 45,
-    height: 45,
-    borderRadius: 15,
-    backgroundColor: COLORS.surface,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 10,
-  },
-
-  roleIconActive: {
-    backgroundColor: COLORS.primary,
-  },
-
-  roleTitle: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: COLORS.textPrimary,
-    marginBottom: 6,
-  },
-
-  roleTitleActive: {
-    color: COLORS.primaryDark,
-  },
-
-  roleDescription: {
-    minHeight: 34,
-    fontSize: 10,
-    lineHeight: 15,
-    color: COLORS.textSecondary,
-    textAlign: "center",
-  },
-
-  radioOuter: {
-    width: 19,
-    height: 19,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 11,
-  },
-
-  radioInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: COLORS.primary,
-  },
-
-  registrationNotice: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    backgroundColor: COLORS.primarySoft,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 14,
-    padding: 13,
-    marginTop: 14,
-    gap: 10,
-  },
-
-  registrationNoticeText: {
-    flex: 1,
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    lineHeight: 19,
-  },
-
   errorContainer: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -761,18 +765,30 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     gap: 8,
   },
-
   error: {
     flex: 1,
     color: COLORS.danger,
     fontSize: 13,
     lineHeight: 19,
   },
-
+  verificationSuccessContainer: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: COLORS.successBackground,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+    gap: 8,
+  },
+  verificationSuccessText: {
+    flex: 1,
+    color: COLORS.textPrimary,
+    fontSize: 13,
+    lineHeight: 19,
+  },
   buttonContainer: {
     marginTop: 5,
   },
-
   loadingContainer: {
     minHeight: 54,
     flexDirection: "row",
@@ -780,13 +796,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 10,
   },
-
   loadingText: {
     color: COLORS.primary,
     fontSize: 14,
     fontWeight: "700",
   },
-
   securityNote: {
     flexDirection: "row",
     alignItems: "center",
@@ -794,13 +808,11 @@ const styles = StyleSheet.create({
     gap: 7,
     marginTop: 8,
   },
-
   securityText: {
     color: COLORS.textSecondary,
     fontSize: 10,
     textAlign: "center",
   },
-
   successCard: {
     alignItems: "center",
     backgroundColor: COLORS.card,
@@ -809,7 +821,6 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     padding: 24,
   },
-
   successIcon: {
     width: 76,
     height: 76,
@@ -819,7 +830,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 16,
   },
-
   successTitle: {
     fontSize: 22,
     fontWeight: "800",
@@ -827,7 +837,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 10,
   },
-
   successText: {
     fontSize: 14,
     lineHeight: 22,
@@ -835,7 +844,152 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 22,
   },
-
+  teacherRequestCard: {
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 18,
+  },
+  teacherRequestIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 15,
+    backgroundColor: COLORS.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  teacherRequestTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: COLORS.textPrimary,
+    marginBottom: 6,
+  },
+  teacherRequestDescription: {
+    fontSize: 12,
+    lineHeight: 19,
+    color: COLORS.textSecondary,
+    marginBottom: 14,
+  },
+  teacherRequestButton: {
+    minHeight: 46,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 10,
+  },
+  teacherRequestButtonText: {
+    color: COLORS.primary,
+    fontSize: 13,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(20, 15, 35, 0.58)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 440,
+    maxHeight: "90%",
+    backgroundColor: COLORS.card,
+    borderRadius: 24,
+    padding: 22,
+  },
+  modalHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  modalIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    backgroundColor: COLORS.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalCloseButton: {
+    padding: 8,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: COLORS.textPrimary,
+    marginBottom: 8,
+  },
+  modalDescription: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: COLORS.textSecondary,
+    marginBottom: 18,
+  },
+  modalInput: {
+    minHeight: 48,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: COLORS.textPrimary,
+    marginBottom: 15,
+    backgroundColor: COLORS.background,
+  },
+  modalTextArea: {
+    minHeight: 84,
+  },
+  modalInfo: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    backgroundColor: COLORS.primarySoft,
+    borderRadius: 12,
+    padding: 11,
+    marginBottom: 16,
+  },
+  modalInfoText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    color: COLORS.textSecondary,
+  },
+  modalPrimaryButton: {
+    minHeight: 50,
+    backgroundColor: COLORS.primary,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  modalPrimaryButtonText: {
+    color: COLORS.textOnPrimary,
+    fontSize: 13,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  disabledButton: {
+    opacity: 0.7,
+  },
+  modalCancelButton: {
+    alignItems: "center",
+    paddingVertical: 14,
+  },
+  modalCancelButtonText: {
+    color: COLORS.textSecondary,
+    fontSize: 14,
+    fontWeight: "700",
+  },
   signinContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -844,19 +998,16 @@ const styles = StyleSheet.create({
     gap: 5,
     marginTop: 25,
   },
-
   signinText: {
     color: COLORS.textSecondary,
     fontSize: 13,
   },
-
   signinLink: {
     color: COLORS.primary,
     fontSize: 13,
     fontWeight: "800",
     paddingVertical: 4,
   },
-
   footer: {
     color: COLORS.textMuted,
     fontSize: 10,

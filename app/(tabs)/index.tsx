@@ -20,7 +20,7 @@ export default function Index() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.headerContainer}>
-          <Header title="QR Attendance" />
+          <Header title="" />
         </View>
 
         <View style={styles.welcomeCard}>
@@ -81,6 +81,53 @@ export default function Index() {
             ]}
           >
             <Ionicons name="arrow-forward" size={22} color={COLORS.primary} />
+          </Pressable>
+        </View>
+
+        {/* Teacher Verification */}
+        <View style={styles.verificationSection}>
+          <View style={styles.verificationHeading}>
+            <Text style={styles.sectionTitle}>Teacher Verification</Text>
+            <Text style={styles.sectionSubtitle}>
+              Want to use teacher features?
+            </Text>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open teacher verification"
+            onPress={() => router.push("/verification")}
+            style={({ pressed }) => [
+              styles.verificationCard,
+              pressed && styles.pressed,
+            ]}
+          >
+            <View style={styles.verificationIcon}>
+              <Ionicons
+                name="shield-checkmark-outline"
+                size={27}
+                color={COLORS.primary}
+              />
+            </View>
+
+            <View style={styles.verificationTextContainer}>
+              <Text style={styles.verificationTitle}>
+                Request Teacher Access
+              </Text>
+
+              <Text style={styles.verificationSubtitle}>
+                Submit your details for administrator review.
+              </Text>
+
+              <View style={styles.verificationLinkRow}>
+                <Text style={styles.verificationLink}>Submit a request</Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={15}
+                  color={COLORS.primary}
+                />
+              </View>
+            </View>
           </Pressable>
         </View>
 
@@ -336,6 +383,71 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.card,
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  verificationSection: {
+    marginBottom: 28,
+  },
+
+  verificationHeading: {
+    paddingHorizontal: 22,
+    marginBottom: 14,
+  },
+
+  verificationCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.card,
+    borderRadius: 20,
+    marginHorizontal: 20,
+    padding: 17,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+
+  verificationIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: COLORS.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 14,
+  },
+
+  verificationTextContainer: {
+    flex: 1,
+  },
+
+  verificationTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 15,
+    fontWeight: "800",
+    marginBottom: 5,
+  },
+
+  verificationSubtitle: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+
+  verificationLinkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 10,
+    gap: 4,
+  },
+
+  verificationLink: {
+    color: COLORS.primary,
+    fontSize: 12,
+    fontWeight: "800",
   },
 
   quickActionsHeader: {

@@ -10,6 +10,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -30,49 +31,67 @@ import {
   type AdminProfile,
   type Role,
 } from "@/lib/profiles";
+import {
+  getTeacherVerificationRequests,
+  reviewTeacherVerificationRequest,
+  type TeacherVerificationRequest,
+} from "@/lib/verification";
 
-type DashboardSection = "users" | "events" | "attendance" | "reports";
+type DashboardSection =
+  | "users"
+  | "verification"
+  | "events"
+  | "attendance"
+  | "reports";
 
 export default function AdminScreen(): React.JSX.Element {
   const { user } = useAuth();
-
   const scrollViewRef = useRef<ScrollView>(null);
 
   const sectionPositions = useRef<Record<DashboardSection, number>>({
     users: 0,
+    verification: 0,
     events: 0,
     attendance: 0,
     reports: 0,
   });
 
   const [role, setRole] = useState<Role | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
 
   // USER MANAGEMENT
   const [users, setUsers] = useState<AdminProfile[]>([]);
-  const [loadingUsers, setLoadingUsers] = useState<boolean>(false);
+  const [loadingUsers, setLoadingUsers] = useState(false);
   const [updatingUser, setUpdatingUser] = useState<string | null>(null);
   const [selectedUser, setSelectedUser] = useState<AdminProfile | null>(null);
-  const [showRoleModal, setShowRoleModal] = useState<boolean>(false);
+  const [showRoleModal, setShowRoleModal] = useState(false);
+
+  // TEACHER VERIFICATION
+  const [verificationRequests, setVerificationRequests] = useState<
+    TeacherVerificationRequest[]
+  >([]);
+  const [loadingVerification, setLoadingVerification] = useState(false);
+  const [reviewingRequest, setReviewingRequest] = useState<string | null>(null);
+  const [verificationNotes, setVerificationNotes] = useState<
+    Record<string, string>
+  >({});
 
   // EVENT MANAGEMENT
   const [events, setEvents] = useState<CloudEvent[]>([]);
-  const [loadingEvents, setLoadingEvents] = useState<boolean>(false);
+  const [loadingEvents, setLoadingEvents] = useState(false);
   const [updatingEvent, setUpdatingEvent] = useState<string | null>(null);
 
   // ATTENDANCE MANAGEMENT
   const [attendance, setAttendance] = useState<AdminAttendanceRecord[]>([]);
-  const [loadingAttendance, setLoadingAttendance] = useState<boolean>(false);
-  const [selectedReportEventId, setSelectedReportEventId] =
-    useState<string>("all");
+  const [loadingAttendance, setLoadingAttendance] = useState(false);
+  const [selectedReportEventId, setSelectedReportEventId] = useState("all");
 
   const [selectedAttendance, setSelectedAttendance] =
     useState<AdminAttendanceRecord | null>(null);
-  const [showAttendanceModal, setShowAttendanceModal] =
-    useState<boolean>(false);
-  const [selectedStudentId, setSelectedStudentId] = useState<string>("");
-  const [selectedEventId, setSelectedEventId] = useState<string>("");
-  const [updatingAttendance, setUpdatingAttendance] = useState<boolean>(false);
+  const [showAttendanceModal, setShowAttendanceModal] = useState(false);
+  const [selectedStudentId, setSelectedStudentId] = useState("");
+  const [selectedEventId, setSelectedEventId] = useState("");
+  const [updatingAttendance, setUpdatingAttendance] = useState(false);
 
   const filteredAttendance =
     selectedReportEventId === "all"
@@ -88,12 +107,8 @@ export default function AdminScreen(): React.JSX.Element {
   );
 
   const navigateToSection = useCallback((section: DashboardSection): void => {
-    const y = sectionPositions.current[section];
-
-    console.log("Navigating to:", section, "Position:", y);
-
     scrollViewRef.current?.scrollTo({
-      y: Math.max(y - 12, 0),
+      y: Math.max(sectionPositions.current[section] - 12, 0),
       animated: true,
     });
   }, []);
@@ -124,12 +139,34 @@ export default function AdminScreen(): React.JSX.Element {
     setLoadingUsers(true);
 
     try {
-      const data: AdminProfile[] = await getAllProfiles();
-      setUsers(data);
+      setUsers(await getAllProfiles());
     } catch (error) {
       console.error("LOAD USERS ERROR:", error);
+      Alert.alert("Error", "Unable to load registered users.");
     } finally {
       setLoadingUsers(false);
+    }
+  }, []);
+
+  // LOAD VERIFICATION REQUESTS
+  const loadVerificationRequests = useCallback(async (): Promise<void> => {
+    setLoadingVerification(true);
+
+    try {
+      const result = await getTeacherVerificationRequests();
+
+      if (result.error) {
+        console.error("LOAD VERIFICATION REQUESTS ERROR:", result.error);
+        Alert.alert("Unable to load requests", result.error.message);
+        return;
+      }
+
+      setVerificationRequests(result.data);
+    } catch (error) {
+      console.error("LOAD VERIFICATION REQUESTS ERROR:", error);
+      Alert.alert("Error", "Unable to load teacher verification requests.");
+    } finally {
+      setLoadingVerification(false);
     }
   }, []);
 
@@ -138,10 +175,10 @@ export default function AdminScreen(): React.JSX.Element {
     setLoadingEvents(true);
 
     try {
-      const data: CloudEvent[] = await getAllEvents();
-      setEvents(data);
+      setEvents(await getAllEvents());
     } catch (error) {
       console.error("LOAD EVENTS ERROR:", error);
+      Alert.alert("Error", "Unable to load events.");
     } finally {
       setLoadingEvents(false);
     }
@@ -152,10 +189,10 @@ export default function AdminScreen(): React.JSX.Element {
     setLoadingAttendance(true);
 
     try {
-      const data: AdminAttendanceRecord[] = await getAllAttendance();
-      setAttendance(data);
+      setAttendance(await getAllAttendance());
     } catch (error) {
       console.error("LOAD ATTENDANCE ERROR:", error);
+      Alert.alert("Error", "Unable to load attendance records.");
     } finally {
       setLoadingAttendance(false);
     }
@@ -171,25 +208,20 @@ export default function AdminScreen(): React.JSX.Element {
     useCallback(() => {
       if (role === "admin") {
         void loadUsers();
+        void loadVerificationRequests();
         void loadEvents();
         void loadAttendance();
       }
-    }, [role, loadUsers, loadEvents, loadAttendance]),
+    }, [role, loadUsers, loadVerificationRequests, loadEvents, loadAttendance]),
   );
 
   // DATE AND TIME
   const formatDateTime = (dateString: string | null): string => {
-    if (!dateString) {
-      return "Not set";
-    }
+    if (!dateString) return "Not set";
 
     const date = new Date(dateString);
 
-    if (Number.isNaN(date.getTime())) {
-      return dateString;
-    }
-
-    return date.toLocaleString();
+    return Number.isNaN(date.getTime()) ? dateString : date.toLocaleString();
   };
 
   // USER MANAGEMENT
@@ -204,9 +236,7 @@ export default function AdminScreen(): React.JSX.Element {
   };
 
   const handleChangeRole = async (newRole: Role): Promise<void> => {
-    if (!selectedUser) {
-      return;
-    }
+    if (!selectedUser) return;
 
     const userId = selectedUser.id;
 
@@ -222,11 +252,9 @@ export default function AdminScreen(): React.JSX.Element {
         return;
       }
 
-      setUsers((currentUsers) =>
-        currentUsers.map((currentUser) =>
-          currentUser.id === userId
-            ? { ...currentUser, role: newRole }
-            : currentUser,
+      setUsers((current) =>
+        current.map((profile) =>
+          profile.id === userId ? { ...profile, role: newRole } : profile,
         ),
       );
 
@@ -240,15 +268,91 @@ export default function AdminScreen(): React.JSX.Element {
   };
 
   const getRoleLabel = (userRole: Role): string => {
-    if (userRole === "admin") {
-      return "Administrator";
-    }
-
-    if (userRole === "teacher") {
-      return "Teacher";
-    }
-
+    if (userRole === "admin") return "Administrator";
+    if (userRole === "teacher") return "Teacher";
     return "Student";
+  };
+
+  // TEACHER VERIFICATION
+  const handleReviewVerification = async (
+    request: TeacherVerificationRequest,
+    decision: "approved" | "rejected",
+  ): Promise<void> => {
+    if (reviewingRequest) return;
+
+    const message =
+      decision === "approved"
+        ? "Approve this request? The database function must update the user's role to teacher."
+        : "Reject this teacher verification request?";
+
+    const performReview = async (): Promise<void> => {
+      setReviewingRequest(request.id);
+
+      try {
+        const result = await reviewTeacherVerificationRequest(
+          request.id,
+          decision,
+          verificationNotes[request.id] ?? "",
+        );
+
+        if (result.error || !result.success) {
+          console.error("VERIFICATION REVIEW ERROR:", result.error);
+
+          Alert.alert(
+            "Review failed",
+            result.error?.message ??
+              "The verification request could not be reviewed.",
+          );
+          return;
+        }
+
+        Alert.alert(
+          decision === "approved" ? "Request approved" : "Request rejected",
+          decision === "approved"
+            ? "The request was reviewed. Verify that the database function updated the user's role."
+            : "The request was rejected.",
+        );
+
+        setVerificationNotes((current) => {
+          const updated = { ...current };
+          delete updated[request.id];
+          return updated;
+        });
+
+        await Promise.all([loadVerificationRequests(), loadUsers()]);
+      } catch (error) {
+        console.error("VERIFICATION REVIEW ERROR:", error);
+
+        Alert.alert(
+          "Review failed",
+          error instanceof Error
+            ? error.message
+            : "Unable to review this request.",
+        );
+      } finally {
+        setReviewingRequest(null);
+      }
+    };
+
+    if (Platform.OS === "web") {
+      if (typeof window !== "undefined" && window.confirm(message)) {
+        await performReview();
+      }
+      return;
+    }
+
+    Alert.alert(
+      decision === "approved" ? "Approve request" : "Reject request",
+      message,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: decision === "approved" ? "Approve" : "Reject",
+          style: decision === "rejected" ? "destructive" : "default",
+          onPress: () => void performReview(),
+        },
+      ],
+    );
   };
 
   // EVENT MANAGEMENT
@@ -263,56 +367,24 @@ export default function AdminScreen(): React.JSX.Element {
 
       if (error) {
         console.error("EVENT STATUS UPDATE ERROR:", error);
-        Alert.alert("Update failed", "Unable to update the event status.");
+        Alert.alert("Update failed", "Unable to update event status.");
         return;
       }
 
-      setEvents((currentEvents) =>
-        currentEvents.map((currentEvent) =>
-          currentEvent.id === event.id
-            ? { ...currentEvent, status: newStatus }
-            : currentEvent,
+      setEvents((current) =>
+        current.map((item) =>
+          item.id === event.id ? { ...item, status: newStatus } : item,
         ),
       );
     } catch (error) {
       console.error("EVENT STATUS UPDATE ERROR:", error);
-      Alert.alert("Update failed", "Unable to update the event status.");
+      Alert.alert("Update failed", "Unable to update event status.");
     } finally {
       setUpdatingEvent(null);
     }
   };
 
   // ATTENDANCE MANAGEMENT
-  const handleDeleteAttendance = async (
-    record: AdminAttendanceRecord,
-  ): Promise<void> => {
-    const confirmDelete = (): void => {
-      void performDeleteAttendance(record);
-    };
-
-    if (Platform.OS === "web") {
-      if (
-        typeof window !== "undefined" &&
-        window.confirm(
-          `Delete the attendance record for ${record.studentName || "this student"}?`,
-        )
-      ) {
-        confirmDelete();
-      }
-
-      return;
-    }
-
-    Alert.alert(
-      "Delete attendance",
-      `Delete the attendance record for ${record.studentName || "this student"}?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: confirmDelete },
-      ],
-    );
-  };
-
   const performDeleteAttendance = async (
     record: AdminAttendanceRecord,
   ): Promise<void> => {
@@ -328,15 +400,33 @@ export default function AdminScreen(): React.JSX.Element {
         return;
       }
 
-      setAttendance((currentAttendance) =>
-        currentAttendance.filter(
-          (currentRecord) => currentRecord.id !== record.id,
-        ),
+      setAttendance((current) =>
+        current.filter((item) => item.id !== record.id),
       );
     } catch (error) {
       console.error("DELETE ATTENDANCE ERROR:", error);
       Alert.alert("Delete failed", "Unable to delete this attendance record.");
     }
+  };
+
+  const handleDeleteAttendance = (record: AdminAttendanceRecord): void => {
+    const message = `Delete the attendance record for ${record.studentName || "this student"}?`;
+
+    if (Platform.OS === "web") {
+      if (typeof window !== "undefined" && window.confirm(message)) {
+        void performDeleteAttendance(record);
+      }
+      return;
+    }
+
+    Alert.alert("Delete attendance", message, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => void performDeleteAttendance(record),
+      },
+    ]);
   };
 
   const handleOpenAttendanceModal = (record: AdminAttendanceRecord): void => {
@@ -390,16 +480,10 @@ export default function AdminScreen(): React.JSX.Element {
   const handleExportAttendance = async (): Promise<void> => {
     if (filteredAttendance.length === 0) {
       if (Platform.OS === "web") {
-        window.alert(
-          "No attendance records available to export for this filter.",
-        );
+        window.alert("No attendance records available to export.");
       } else {
-        Alert.alert(
-          "No attendance records",
-          "No attendance records available to export for this filter.",
-        );
+        Alert.alert("No attendance records", "There are no records to export.");
       }
-
       return;
     }
 
@@ -415,7 +499,6 @@ export default function AdminScreen(): React.JSX.Element {
       const escapeCsv = (value: unknown): string => {
         let text = String(value ?? "");
 
-        // Prevent spreadsheet formula injection.
         if (/^[\t\r ]*[=+\-@]/.test(text)) {
           text = "'" + text;
         }
@@ -446,7 +529,6 @@ export default function AdminScreen(): React.JSX.Element {
         const blob = new Blob([csvContent], {
           type: "text/csv;charset=utf-8;",
         });
-
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
 
@@ -458,10 +540,7 @@ export default function AdminScreen(): React.JSX.Element {
         link.click();
         document.body.removeChild(link);
 
-        window.setTimeout(() => {
-          URL.revokeObjectURL(url);
-        }, 1000);
-
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
         return;
       }
 
@@ -481,17 +560,12 @@ export default function AdminScreen(): React.JSX.Element {
         UTI: "public.comma-separated-values-text",
       });
     } catch (error) {
-      console.error("CSV export failed:", error);
+      console.error("CSV EXPORT ERROR:", error);
 
       if (Platform.OS === "web") {
-        window.alert(
-          "Unable to export the attendance report. Please try again.",
-        );
+        window.alert("Unable to export the attendance report.");
       } else {
-        Alert.alert(
-          "Export failed",
-          "Unable to export the attendance report. Please try again.",
-        );
+        Alert.alert("Export failed", "Unable to export the attendance report.");
       }
     }
   };
@@ -513,7 +587,6 @@ export default function AdminScreen(): React.JSX.Element {
             size={42}
             color={COLORS.primary}
           />
-
           <View style={styles.lockBadge}>
             <Ionicons
               name="lock-closed"
@@ -524,13 +597,12 @@ export default function AdminScreen(): React.JSX.Element {
         </View>
 
         <Text style={styles.lockEyebrow}>RESTRICTED ACCESS</Text>
-
         <Text style={styles.lockTitle}>Admin Only</Text>
 
         <Text style={styles.lockSubtitle}>
           This section is reserved for administrators. Your account does not
-          have permission to manage users, events, attendance records, or system
-          reports.
+          have permission to manage users, teacher verification, events,
+          attendance records, or reports.
         </Text>
 
         <View style={styles.lockNotice}>
@@ -539,7 +611,6 @@ export default function AdminScreen(): React.JSX.Element {
             size={21}
             color={COLORS.primary}
           />
-
           <Text style={styles.lockNoticeText}>
             Contact your school administrator if you need administrator access.
           </Text>
@@ -552,7 +623,7 @@ export default function AdminScreen(): React.JSX.Element {
             color={COLORS.textMuted}
           />
           <Text style={styles.lockFooterText}>
-            QR-ATT · Protected Administration Workspace
+            Lavender Attend · Protected Administration Workspace
           </Text>
         </View>
       </View>
@@ -567,7 +638,7 @@ export default function AdminScreen(): React.JSX.Element {
         contentContainerStyle={styles.content}
       >
         <Text style={styles.title}>Admin Dashboard</Text>
-        <Text style={styles.subtitle}>QR-ATT Management System.</Text>
+        <Text style={styles.subtitle}>Lavender Attend Management System.</Text>
 
         {/* QUICK NAVIGATION */}
         <View style={styles.quickNavCard}>
@@ -585,93 +656,40 @@ export default function AdminScreen(): React.JSX.Element {
           </View>
 
           <View style={styles.quickNavGrid}>
-            {/* USERS */}
-            <TouchableOpacity
-              style={[styles.quickNavButton, styles.quickNavUsers]}
+            <QuickNavButton
+              title="Users"
+              subtitle={`${users.length} accounts`}
+              icon="people-outline"
               onPress={() => navigateToSection("users")}
-              activeOpacity={0.75}
-            >
-              <View style={styles.quickNavIconBox}>
-                <Ionicons name="people-outline" size={23} color="#7964D8" />
-              </View>
+            />
 
-              <View style={styles.quickNavTextArea}>
-                <Text style={styles.quickNavButtonText}>Users</Text>
-                <Text style={styles.quickNavCount}>
-                  {users.length} accounts
-                </Text>
-              </View>
+            <QuickNavButton
+              title="Teacher Verification"
+              subtitle={`${verificationRequests.length} pending`}
+              icon="shield-checkmark-outline"
+              onPress={() => navigateToSection("verification")}
+            />
 
-              <View style={styles.quickNavArrow}>
-                <Ionicons name="arrow-forward" size={16} color="#7964D8" />
-              </View>
-            </TouchableOpacity>
-
-            {/* EVENTS */}
-            <TouchableOpacity
-              style={[styles.quickNavButton, styles.quickNavEvents]}
+            <QuickNavButton
+              title="Events"
+              subtitle={`${events.length} events`}
+              icon="calendar-outline"
               onPress={() => navigateToSection("events")}
-              activeOpacity={0.75}
-            >
-              <View style={styles.quickNavIconBox}>
-                <Ionicons name="calendar-outline" size={23} color="#7964D8" />
-              </View>
+            />
 
-              <View style={styles.quickNavTextArea}>
-                <Text style={styles.quickNavButtonText}>Events</Text>
-                <Text style={styles.quickNavCount}>{events.length} events</Text>
-              </View>
-
-              <View style={styles.quickNavArrow}>
-                <Ionicons name="arrow-forward" size={16} color="#7964D8" />
-              </View>
-            </TouchableOpacity>
-
-            {/* ATTENDANCE */}
-            <TouchableOpacity
-              style={[styles.quickNavButton, styles.quickNavAttendance]}
+            <QuickNavButton
+              title="Attendance"
+              subtitle={`${attendance.length} records`}
+              icon="clipboard-outline"
               onPress={() => navigateToSection("attendance")}
-              activeOpacity={0.75}
-            >
-              <View style={styles.quickNavIconBox}>
-                <Ionicons name="clipboard-outline" size={23} color="#7964D8" />
-              </View>
+            />
 
-              <View style={styles.quickNavTextArea}>
-                <Text style={styles.quickNavButtonText}>Attendance</Text>
-                <Text style={styles.quickNavCount}>
-                  {attendance.length} records
-                </Text>
-              </View>
-
-              <View style={styles.quickNavArrow}>
-                <Ionicons name="arrow-forward" size={16} color="#7964D8" />
-              </View>
-            </TouchableOpacity>
-
-            {/* REPORTS */}
-            <TouchableOpacity
-              style={[styles.quickNavButton, styles.quickNavReports]}
+            <QuickNavButton
+              title="Reports"
+              subtitle="Analytics & exports"
+              icon="stats-chart-outline"
               onPress={() => navigateToSection("reports")}
-              activeOpacity={0.75}
-            >
-              <View style={styles.quickNavIconBox}>
-                <Ionicons
-                  name="stats-chart-outline"
-                  size={23}
-                  color="#7964D8"
-                />
-              </View>
-
-              <View style={styles.quickNavTextArea}>
-                <Text style={styles.quickNavButtonText}>Reports</Text>
-                <Text style={styles.quickNavCount}>Analytics & exports</Text>
-              </View>
-
-              <View style={styles.quickNavArrow}>
-                <Ionicons name="arrow-forward" size={16} color="#7964D8" />
-              </View>
-            </TouchableOpacity>
+            />
           </View>
         </View>
 
@@ -683,7 +701,6 @@ export default function AdminScreen(): React.JSX.Element {
           }
         >
           <Text style={styles.cardTitle}>User Management</Text>
-
           <Text style={styles.cardDescription}>
             View and manage student, teacher, and administrator accounts.
           </Text>
@@ -699,42 +716,208 @@ export default function AdminScreen(): React.JSX.Element {
           ) : users.length === 0 ? (
             <Text style={styles.emptyText}>No users found.</Text>
           ) : (
-            users.map(
-              (profile): React.JSX.Element => (
-                <View key={profile.id} style={styles.userItem}>
-                  <View style={styles.userInfo}>
-                    <Text style={styles.userName}>
-                      {profile.full_name || "No name"}
-                    </Text>
-                    <Text style={styles.userEmail}>{profile.email}</Text>
-                    <Text style={styles.userId} numberOfLines={1}>
-                      ID: {profile.id}
+            users.map((profile) => (
+              <View key={profile.id} style={styles.userItem}>
+                <View style={styles.userInfo}>
+                  <Text style={styles.userName}>
+                    {profile.full_name || "No name"}
+                  </Text>
+                  <Text style={styles.userEmail}>{profile.email}</Text>
+                  <Text style={styles.userId} numberOfLines={1}>
+                    ID: {profile.id}
+                  </Text>
+                </View>
+
+                <View style={styles.userActions}>
+                  <View style={styles.roleBadge}>
+                    <Text style={styles.roleBadgeText}>
+                      {getRoleLabel(profile.role)}
                     </Text>
                   </View>
 
-                  <View style={styles.userActions}>
-                    <View style={styles.roleBadge}>
-                      <Text style={styles.roleBadgeText}>
-                        {getRoleLabel(profile.role)}
+                  <TouchableOpacity
+                    style={styles.editRoleButton}
+                    disabled={updatingUser === profile.id}
+                    onPress={() => handleOpenRoleModal(profile)}
+                  >
+                    <Text style={styles.editRoleButtonText}>
+                      {updatingUser === profile.id
+                        ? "Updating..."
+                        : "Edit Role"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
+          )}
+        </View>
+
+        {/* TEACHER VERIFICATION */}
+        <View
+          style={styles.card}
+          onLayout={(event) =>
+            recordSectionPosition("verification", event.nativeEvent.layout.y)
+          }
+        >
+          <View style={styles.verificationHeader}>
+            <View style={styles.verificationHeaderIcon}>
+              <Ionicons
+                name="shield-checkmark-outline"
+                size={25}
+                color={COLORS.primary}
+              />
+            </View>
+
+            <View style={styles.verificationHeaderText}>
+              <Text style={styles.cardTitle}>Teacher Verification</Text>
+              <Text style={styles.cardDescription}>
+                Review student requests for teacher access.
+              </Text>
+            </View>
+
+            <View style={styles.pendingBadge}>
+              <Text style={styles.pendingBadgeText}>
+                {verificationRequests.length}
+              </Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={styles.refreshButton}
+            disabled={loadingVerification}
+            onPress={() => void loadVerificationRequests()}
+          >
+            <Ionicons name="refresh-outline" size={17} color={COLORS.primary} />
+            <Text style={styles.refreshButtonText}>
+              {loadingVerification ? "Refreshing..." : "Refresh Requests"}
+            </Text>
+          </TouchableOpacity>
+
+          <View style={styles.divider} />
+
+          {loadingVerification ? (
+            <Text style={styles.loadingText}>
+              Loading teacher verification requests...
+            </Text>
+          ) : verificationRequests.length === 0 ? (
+            <View style={styles.emptyVerification}>
+              <Ionicons
+                name="checkmark-circle-outline"
+                size={35}
+                color={COLORS.success}
+              />
+              <Text style={styles.emptyVerificationTitle}>
+                No pending requests
+              </Text>
+              <Text style={styles.emptyVerificationText}>
+                New teacher verification requests will appear here.
+              </Text>
+            </View>
+          ) : (
+            verificationRequests.map((request) => {
+              const isReviewing = reviewingRequest === request.id;
+
+              return (
+                <View key={request.id} style={styles.verificationItem}>
+                  <View style={styles.verificationItemTop}>
+                    <View style={styles.verificationItemIcon}>
+                      <Ionicons
+                        name="person-outline"
+                        size={21}
+                        color={COLORS.primary}
+                      />
+                    </View>
+
+                    <View style={styles.verificationItemIdentity}>
+                      <Text style={styles.verificationItemTitle}>
+                        Teacher Access Request
+                      </Text>
+                      <Text style={styles.verificationItemDate}>
+                        Submitted: {formatDateTime(request.created_at)}
                       </Text>
                     </View>
 
+                    <View style={styles.pendingStatusBadge}>
+                      <Text style={styles.pendingStatusText}>Pending</Text>
+                    </View>
+                  </View>
+
+                  <Text style={styles.verificationLabel}>User ID</Text>
+                  <Text style={styles.verificationUserId}>
+                    {request.user_id}
+                  </Text>
+
+                  <Text style={styles.verificationLabel}>
+                    Applicant's details
+                  </Text>
+                  <Text style={styles.verificationDetails}>
+                    {request.details}
+                  </Text>
+
+                  <Text style={styles.verificationLabel}>
+                    Administrator notes (optional)
+                  </Text>
+
+                  <TextInput
+                    style={styles.notesInput}
+                    value={verificationNotes[request.id] ?? ""}
+                    onChangeText={(value) =>
+                      setVerificationNotes((current) => ({
+                        ...current,
+                        [request.id]: value,
+                      }))
+                    }
+                    placeholder="Enter a reason or review note..."
+                    placeholderTextColor={COLORS.textMuted}
+                    multiline
+                    numberOfLines={3}
+                    textAlignVertical="top"
+                    editable={!isReviewing}
+                  />
+
+                  <View style={styles.verificationActions}>
                     <TouchableOpacity
-                      style={styles.editRoleButton}
-                      activeOpacity={0.6}
-                      disabled={updatingUser === profile.id}
-                      onPress={() => handleOpenRoleModal(profile)}
+                      style={[
+                        styles.approveButton,
+                        isReviewing && styles.disabledButton,
+                      ]}
+                      disabled={isReviewing || reviewingRequest !== null}
+                      onPress={() =>
+                        void handleReviewVerification(request, "approved")
+                      }
                     >
-                      <Text style={styles.editRoleButtonText}>
-                        {updatingUser === profile.id
-                          ? "Updating..."
-                          : "Edit Role"}
+                      <Ionicons
+                        name="checkmark-circle-outline"
+                        size={18}
+                        color="#FFFFFF"
+                      />
+                      <Text style={styles.reviewButtonText}>
+                        {isReviewing ? "Processing..." : "Approve"}
                       </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.rejectButton,
+                        (isReviewing || reviewingRequest !== null) &&
+                          styles.disabledButton,
+                      ]}
+                      disabled={isReviewing || reviewingRequest !== null}
+                      onPress={() =>
+                        void handleReviewVerification(request, "rejected")
+                      }
+                    >
+                      <Ionicons
+                        name="close-circle-outline"
+                        size={18}
+                        color={COLORS.danger}
+                      />
+                      <Text style={styles.rejectButtonText}>Reject</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
-              ),
-            )
+              );
+            })
           )}
         </View>
 
@@ -746,7 +929,6 @@ export default function AdminScreen(): React.JSX.Element {
           }
         >
           <Text style={styles.cardTitle}>Event Management</Text>
-
           <Text style={styles.cardDescription}>
             View all school events and manage their open or closed status.
           </Text>
@@ -762,7 +944,7 @@ export default function AdminScreen(): React.JSX.Element {
           ) : events.length === 0 ? (
             <Text style={styles.emptyText}>No events found.</Text>
           ) : (
-            events.map((event): React.JSX.Element => {
+            events.map((event) => {
               const eventStatus = event.status ?? "open";
               const isUpdating = updatingEvent === event.id;
 
@@ -771,15 +953,12 @@ export default function AdminScreen(): React.JSX.Element {
                   <Text style={styles.eventTitle}>
                     {event.title || "Untitled event"}
                   </Text>
-
                   <Text style={styles.eventCode}>
                     Event Code: {event.event_code}
                   </Text>
-
                   <Text style={styles.eventTime}>
                     Start: {formatDateTime(event.start_time)}
                   </Text>
-
                   <Text style={styles.eventTime}>
                     End: {formatDateTime(event.end_time)}
                   </Text>
@@ -808,27 +987,34 @@ export default function AdminScreen(): React.JSX.Element {
                       </Text>
                     </View>
 
-                    {eventStatus === "closed" ? (
-                      <TouchableOpacity
-                        style={styles.reopenButton}
-                        disabled={isUpdating}
-                        onPress={() => handleChangeEventStatus(event, "open")}
+                    <TouchableOpacity
+                      style={
+                        eventStatus === "closed"
+                          ? styles.reopenButton
+                          : styles.closeButton
+                      }
+                      disabled={isUpdating}
+                      onPress={() =>
+                        void handleChangeEventStatus(
+                          event,
+                          eventStatus === "closed" ? "open" : "closed",
+                        )
+                      }
+                    >
+                      <Text
+                        style={
+                          eventStatus === "closed"
+                            ? styles.reopenButtonText
+                            : styles.closeButtonText
+                        }
                       >
-                        <Text style={styles.reopenButtonText}>
-                          {isUpdating ? "Updating..." : "Reopen Event"}
-                        </Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <TouchableOpacity
-                        style={styles.closeButton}
-                        disabled={isUpdating}
-                        onPress={() => handleChangeEventStatus(event, "closed")}
-                      >
-                        <Text style={styles.closeButtonText}>
-                          {isUpdating ? "Updating..." : "Close Event"}
-                        </Text>
-                      </TouchableOpacity>
-                    )}
+                        {isUpdating
+                          ? "Updating..."
+                          : eventStatus === "closed"
+                            ? "Reopen Event"
+                            : "Close Event"}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               );
@@ -844,9 +1030,8 @@ export default function AdminScreen(): React.JSX.Element {
           }
         >
           <Text style={styles.cardTitle}>Attendance Management</Text>
-
           <Text style={styles.cardDescription}>
-            View and manage attendance records across the system.
+            View, edit, and delete attendance records across the system.
           </Text>
 
           <View style={styles.divider} />
@@ -862,51 +1047,45 @@ export default function AdminScreen(): React.JSX.Element {
           ) : attendance.length === 0 ? (
             <Text style={styles.emptyText}>No attendance records found.</Text>
           ) : (
-            attendance.map(
-              (record): React.JSX.Element => (
-                <View key={record.id} style={styles.attendanceItem}>
-                  <Text style={styles.attendanceStudent}>
-                    {record.studentName || "Unknown student"}
-                  </Text>
+            attendance.map((record) => (
+              <View key={record.id} style={styles.attendanceItem}>
+                <Text style={styles.attendanceStudent}>
+                  {record.studentName || "Unknown student"}
+                </Text>
+                <Text style={styles.attendanceEmail}>
+                  {record.studentEmail || "No email"}
+                </Text>
+                <Text style={styles.attendanceEvent}>
+                  Event: {record.eventTitle || "Unknown event"}
+                </Text>
+                <Text style={styles.attendanceCode}>
+                  Code: {record.eventCode || "No event code"}
+                </Text>
+                <Text style={styles.attendanceTime}>
+                  Scanned: {formatDateTime(record.scannedAt)}
+                </Text>
 
-                  <Text style={styles.attendanceEmail}>
-                    {record.studentEmail || "No email"}
-                  </Text>
+                <View style={styles.attendanceActions}>
+                  <TouchableOpacity
+                    style={styles.editAttendanceButton}
+                    onPress={() => handleOpenAttendanceModal(record)}
+                  >
+                    <Text style={styles.editAttendanceButtonText}>
+                      Edit Attendance
+                    </Text>
+                  </TouchableOpacity>
 
-                  <Text style={styles.attendanceEvent}>
-                    Event: {record.eventTitle || "Unknown event"}
-                  </Text>
-
-                  <Text style={styles.attendanceCode}>
-                    Code: {record.eventCode || "No event code"}
-                  </Text>
-
-                  <Text style={styles.attendanceTime}>
-                    Scanned: {formatDateTime(record.scannedAt)}
-                  </Text>
-
-                  <View style={styles.attendanceActions}>
-                    <TouchableOpacity
-                      style={styles.editAttendanceButton}
-                      onPress={() => handleOpenAttendanceModal(record)}
-                    >
-                      <Text style={styles.editAttendanceButtonText}>
-                        Edit Attendance
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={styles.deleteAttendanceButton}
-                      onPress={() => void handleDeleteAttendance(record)}
-                    >
-                      <Text style={styles.deleteAttendanceButtonText}>
-                        Delete Attendance
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
+                  <TouchableOpacity
+                    style={styles.deleteAttendanceButton}
+                    onPress={() => handleDeleteAttendance(record)}
+                  >
+                    <Text style={styles.deleteAttendanceButtonText}>
+                      Delete Attendance
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-              ),
-            )
+              </View>
+            ))
           )}
         </View>
 
@@ -918,12 +1097,10 @@ export default function AdminScreen(): React.JSX.Element {
           }
         >
           <Text style={styles.cardTitle}>Reports</Text>
-
           <Text style={styles.cardDescription}>
-            Filter attendance records by event and export the selected report.
+            Filter attendance by event and export the selected report.
           </Text>
 
-          {/* ATTENDANCE STATISTICS */}
           <View style={styles.reportStatsContainer}>
             <View style={styles.reportStatBox}>
               <Text style={styles.reportStatNumber}>{attendance.length}</Text>
@@ -943,7 +1120,6 @@ export default function AdminScreen(): React.JSX.Element {
             </View>
           </View>
 
-          {/* EVENT FILTER */}
           <Text style={styles.reportSectionTitle}>Filter by Event</Text>
 
           <ScrollView
@@ -994,7 +1170,6 @@ export default function AdminScreen(): React.JSX.Element {
             ))}
           </ScrollView>
 
-          {/* EXPORT FILTERED RECORDS */}
           <TouchableOpacity
             style={[
               styles.exportReportButton,
@@ -1003,6 +1178,11 @@ export default function AdminScreen(): React.JSX.Element {
             onPress={() => void handleExportAttendance()}
             disabled={filteredAttendance.length === 0}
           >
+            <Ionicons
+              name="download-outline"
+              size={19}
+              color={COLORS.textOnPrimary}
+            />
             <Text style={styles.exportReportButtonText}>
               {filteredAttendance.length === 0
                 ? "No Records to Export"
@@ -1010,7 +1190,6 @@ export default function AdminScreen(): React.JSX.Element {
             </Text>
           </TouchableOpacity>
 
-          {/* FILTERED ATTENDANCE RECORDS */}
           <Text style={styles.reportSectionTitle}>
             Attendance Records ({filteredAttendance.length})
           </Text>
@@ -1045,7 +1224,6 @@ export default function AdminScreen(): React.JSX.Element {
             ))
           )}
 
-          {/* EVENT SUMMARIES */}
           <Text style={styles.reportSectionTitle}>
             Event Attendance Summary
           </Text>
@@ -1061,28 +1239,23 @@ export default function AdminScreen(): React.JSX.Element {
                   selectedReportEventId === "all" ||
                   event.id === selectedReportEventId,
               )
-              .map((event) => {
-                const eventAttendance = attendance.filter(
-                  (record) => record.eventId === event.id,
-                );
-
-                return (
-                  <View key={event.id} style={styles.reportEventItem}>
-                    <Text style={styles.reportEventTitle}>
-                      {event.title || "Untitled event"}
-                    </Text>
-                    <Text style={styles.reportEventDetails}>
-                      Event Code: {event.event_code}
-                    </Text>
-                    <Text style={styles.reportEventDetails}>
-                      Attendance Records: {eventAttendance.length}
-                    </Text>
-                    <Text style={styles.reportEventDetails}>
-                      Status: {event.status || "Unknown"}
-                    </Text>
-                  </View>
-                );
-              })
+              .map((event) => (
+                <View key={event.id} style={styles.reportEventItem}>
+                  <Text style={styles.reportEventTitle}>
+                    {event.title || "Untitled event"}
+                  </Text>
+                  <Text style={styles.reportEventDetails}>
+                    Event Code: {event.event_code}
+                  </Text>
+                  <Text style={styles.reportEventDetails}>
+                    Attendance Records:{" "}
+                    {attendance.filter((r) => r.eventId === event.id).length}
+                  </Text>
+                  <Text style={styles.reportEventDetails}>
+                    Status: {event.status || "Unknown"}
+                  </Text>
+                </View>
+              ))
           )}
         </View>
       </ScrollView>
@@ -1097,7 +1270,6 @@ export default function AdminScreen(): React.JSX.Element {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <Text style={styles.modalTitle}>Change User Role</Text>
-
             <Text style={styles.modalSubtitle}>
               {selectedUser?.full_name ||
                 selectedUser?.email ||
@@ -1157,7 +1329,6 @@ export default function AdminScreen(): React.JSX.Element {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <Text style={styles.modalTitle}>Edit Attendance</Text>
-
             <Text style={styles.modalSubtitle}>
               Select the correct student and event.
             </Text>
@@ -1210,7 +1381,6 @@ export default function AdminScreen(): React.JSX.Element {
                   >
                     {event.title || "Untitled event"}
                   </Text>
-
                   <Text style={styles.selectionSecondaryText}>
                     Code: {event.event_code}
                   </Text>
@@ -1249,7 +1419,125 @@ export default function AdminScreen(): React.JSX.Element {
   );
 }
 
+/* -------------------- QUICK NAVIGATION BUTTON -------------------- */
+
+type QuickNavButtonProps = {
+  title: string;
+  subtitle: string;
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  onPress: () => void;
+};
+
+function QuickNavButton({
+  title,
+  subtitle,
+  icon,
+  onPress,
+}: QuickNavButtonProps): React.JSX.Element {
+  return (
+    <TouchableOpacity
+      style={styles.quickNavButton}
+      onPress={onPress}
+      activeOpacity={0.75}
+    >
+      <View style={styles.quickNavIconBox}>
+        <Ionicons name={icon} size={23} color="#7964D8" />
+      </View>
+
+      <Text style={styles.quickNavButtonText}>{title}</Text>
+      <Text style={styles.quickNavCount}>{subtitle}</Text>
+
+      <View style={styles.quickNavArrow}>
+        <Ionicons name="arrow-forward" size={16} color="#7964D8" />
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+/* -------------------- STYLES -------------------- */
+
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  content: {
+    paddingHorizontal: 18,
+    paddingTop: 22,
+    paddingBottom: 40,
+  },
+  centerContainer: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: COLORS.textPrimary,
+    marginBottom: 6,
+  },
+  subtitle: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    lineHeight: 20,
+    marginBottom: 22,
+  },
+  card: {
+    backgroundColor: COLORS.card,
+    borderRadius: 22,
+    padding: 17,
+    marginBottom: 17,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: COLORS.textPrimary,
+    marginBottom: 6,
+  },
+  cardDescription: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    lineHeight: 19,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginVertical: 16,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: COLORS.textPrimary,
+    marginBottom: 12,
+  },
+  loadingText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    paddingVertical: 12,
+  },
+  emptyText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
+    padding: 14,
+    lineHeight: 19,
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
+
+  // QUICK NAVIGATION
   quickNavCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 22,
@@ -1263,26 +1551,22 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 2,
   },
-
   quickNavHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 16,
   },
-
   quickNavTitle: {
     fontSize: 17,
     fontWeight: "800",
     color: "#30264A",
     marginBottom: 4,
   },
-
   quickNavSubtitle: {
     fontSize: 12,
     color: "#8A819F",
   },
-
   quickNavHeaderIcon: {
     width: 40,
     height: 40,
@@ -1291,44 +1575,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
   quickNavGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
   },
-
   quickNavButton: {
     width: "48%",
     flexGrow: 1,
     flexBasis: "40%",
-    minHeight: 104,
+    minHeight: 112,
     padding: 12,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: "#E5DAFA",
-    flexDirection: "column",
-    alignItems: "stretch",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-
-  quickNavUsers: {
     backgroundColor: "#F5F1FF",
+    justifyContent: "space-between",
+    gap: 8,
   },
-
-  quickNavEvents: {
-    backgroundColor: "#F1EDFF",
-  },
-
-  quickNavAttendance: {
-    backgroundColor: "#F7F2FF",
-  },
-
-  quickNavReports: {
-    backgroundColor: "#EEE8FF",
-  },
-
   quickNavIconBox: {
     width: 36,
     height: 36,
@@ -1339,26 +1603,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
-  quickNavTextArea: {
-    flex: 1,
-    minWidth: 0,
-  },
-
   quickNavButtonText: {
     fontSize: 13,
     fontWeight: "800",
     color: "#392D57",
-    marginBottom: 4,
+    paddingRight: 18,
   },
-
   quickNavCount: {
     fontSize: 10,
     fontWeight: "600",
     color: "#8779A5",
     lineHeight: 14,
   },
-
   quickNavArrow: {
     position: "absolute",
     top: 16,
@@ -1461,89 +1717,6 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
   },
 
-  // LAYOUT
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  content: {
-    paddingHorizontal: 18,
-    paddingTop: 22,
-    paddingBottom: 40,
-  },
-  centerContainer: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: COLORS.textPrimary,
-    marginBottom: 6,
-  },
-  subtitle: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    lineHeight: 20,
-    marginBottom: 22,
-  },
-
-  // DASHBOARD CARDS
-  card: {
-    backgroundColor: COLORS.card,
-    borderRadius: 22,
-    padding: 17,
-    marginBottom: 17,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: COLORS.textPrimary,
-    marginBottom: 6,
-  },
-  cardDescription: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    lineHeight: 19,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: COLORS.border,
-    marginVertical: 16,
-  },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: COLORS.textPrimary,
-    marginBottom: 12,
-  },
-  loadingText: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    paddingVertical: 12,
-  },
-  emptyText: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    backgroundColor: COLORS.background,
-    borderRadius: 12,
-    padding: 14,
-    lineHeight: 19,
-  },
-  disabledButton: {
-    opacity: 0.5,
-  },
-
   // USER MANAGEMENT
   userItem: {
     paddingVertical: 15,
@@ -1601,6 +1774,192 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
     color: COLORS.primary,
+  },
+
+  // TEACHER VERIFICATION
+  verificationHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+  },
+  verificationHeaderIcon: {
+    width: 45,
+    height: 45,
+    borderRadius: 14,
+    backgroundColor: COLORS.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  verificationHeaderText: {
+    flex: 1,
+  },
+  pendingBadge: {
+    minWidth: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#EEE8FF",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+  },
+  pendingBadgeText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: COLORS.primary,
+  },
+  refreshButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    backgroundColor: COLORS.primarySoft,
+    borderWidth: 1,
+    borderColor: COLORS.primaryLight,
+    borderRadius: 12,
+    paddingVertical: 11,
+    marginTop: 15,
+  },
+  refreshButtonText: {
+    color: COLORS.primary,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  emptyVerification: {
+    alignItems: "center",
+    paddingVertical: 25,
+    paddingHorizontal: 10,
+  },
+  emptyVerificationTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: COLORS.textPrimary,
+    marginTop: 10,
+  },
+  emptyVerificationText: {
+    fontSize: 12,
+    lineHeight: 19,
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    marginTop: 5,
+  },
+  verificationItem: {
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
+  },
+  verificationItemTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    marginBottom: 14,
+  },
+  verificationItemIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: COLORS.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  verificationItemIdentity: {
+    flex: 1,
+  },
+  verificationItemTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: COLORS.textPrimary,
+  },
+  verificationItemDate: {
+    fontSize: 10,
+    lineHeight: 15,
+    color: COLORS.textSecondary,
+    marginTop: 4,
+  },
+  pendingStatusBadge: {
+    backgroundColor: "#FFF2D8",
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+  },
+  pendingStatusText: {
+    color: "#986817",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  verificationLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: COLORS.textPrimary,
+    marginTop: 12,
+    marginBottom: 5,
+  },
+  verificationUserId: {
+    fontSize: 10,
+    lineHeight: 16,
+    color: COLORS.textSecondary,
+  },
+  verificationDetails: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: COLORS.textPrimary,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 11,
+    padding: 11,
+  },
+  notesInput: {
+    minHeight: 80,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    padding: 11,
+    fontSize: 12,
+    color: COLORS.textPrimary,
+    lineHeight: 18,
+  },
+  verificationActions: {
+    flexDirection: "row",
+    gap: 9,
+    marginTop: 14,
+  },
+  approveButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: COLORS.primary,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+  },
+  reviewButtonText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#FFFFFF",
+  },
+  rejectButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: COLORS.dangerBackground,
+    borderWidth: 1,
+    borderColor: COLORS.danger,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+  },
+  rejectButtonText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: COLORS.danger,
   },
 
   // EVENT MANAGEMENT
@@ -1772,12 +2131,14 @@ const styles = StyleSheet.create({
 
   // REPORTS
   exportReportButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
     backgroundColor: COLORS.primary,
     borderRadius: 14,
     paddingVertical: 15,
     paddingHorizontal: 16,
-    alignItems: "center",
-    justifyContent: "center",
     marginTop: 12,
     marginBottom: 20,
   },
@@ -1822,6 +2183,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: COLORS.textPrimary,
     marginBottom: 12,
+    marginTop: 6,
   },
   reportFilterList: {
     flexDirection: "row",
