@@ -90,21 +90,33 @@ export async function registerAttendance(
       };
     }
 
+    // Supports JSON attendance payloads and plain event-code QR values,
+    // provided parseQRPayload in lib/qr.ts supports both formats.
     const parsed = parseQRPayload(rawPayload);
 
     if (!parsed.ok) {
       return {
         success: false,
-        message: "Invalid QR code.",
+        message: parsed.message || "Invalid QR code.",
       };
     }
 
+    // Look up the event using its event code.
     const event = await getEventByCode(parsed.payload.event);
 
     if (!event) {
       return {
         success: false,
-        message: "Event not found.",
+        message: "Event not found. Please scan a valid event QR code.",
+      };
+    }
+
+    // Reject closed events before schedule validation and database insertion.
+    if (event.status === "closed") {
+      return {
+        success: false,
+        message: "This event is closed. Attendance is not available.",
+        eventTitle: event.title,
       };
     }
 
@@ -114,6 +126,7 @@ export async function registerAttendance(
 
     console.log("ATTENDANCE TIME CHECK:", {
       eventTitle: event.title,
+      eventStatus: event.status ?? "unknown",
       nowISO: now.toISOString(),
       rawStart: event.start_time,
       parsedStartISO: start?.toISOString() ?? null,
@@ -121,28 +134,35 @@ export async function registerAttendance(
       parsedEndISO: end?.toISOString() ?? null,
     });
 
+    // Reject invalid event schedules.
     if ((event.start_time && !start) || (event.end_time && !end)) {
       return {
         success: false,
         message:
           "The event schedule is invalid. Please contact the administrator.",
+        eventTitle: event.title,
       };
     }
 
+    // Reject attendance before the event starts.
     if (start && now < start) {
       return {
         success: false,
         message: "This event has not started yet.",
+        eventTitle: event.title,
       };
     }
 
+    // Reject attendance after the event ends.
     if (end && now > end) {
       return {
         success: false,
         message: "This event has already ended.",
+        eventTitle: event.title,
       };
     }
 
+    // Insert the attendance record only after all checks pass.
     const { error } = await supabase.from("attendance").insert({
       student_id: studentId,
       event_id: event.id,
@@ -150,10 +170,12 @@ export async function registerAttendance(
     });
 
     if (error) {
+      // Preserve duplicate-attendance protection.
       if (error.code === "23505") {
         return {
           success: false,
           message: "You have already attended this event.",
+          eventTitle: event.title,
         };
       }
 
@@ -162,6 +184,7 @@ export async function registerAttendance(
       return {
         success: false,
         message: error.message || "Failed to register attendance.",
+        eventTitle: event.title,
       };
     }
 
@@ -251,7 +274,7 @@ async function getStudentProfiles(
     return profileMap;
   }
 
-  // First, fetch all student profiles in one query.
+  // Fetch all student profiles in one query.
   const { data: profiles, error: profilesError } = await supabase
     .from("profiles")
     .select("id, full_name, email")
@@ -269,8 +292,7 @@ async function getStudentProfiles(
     }
   }
 
-  // Retry missing profiles individually. This also helps diagnose
-  // whether a specific profile can be read by the current app session.
+  // Retry missing profiles individually.
   const missingIds = uniqueIds.filter((id) => !profileMap.has(id));
 
   for (const studentId of missingIds) {
@@ -356,7 +378,7 @@ export async function getTeacherEventAttendance(
     }));
   }
 
-  // 3. Fetch the profiles for the student IDs in these records.
+  // 3. Fetch profiles for the student IDs in these records.
   const studentIds = [
     ...new Set(attendance.map((record) => String(record.student_id))),
   ];

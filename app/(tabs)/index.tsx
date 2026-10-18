@@ -1,6 +1,8 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
+import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -11,8 +13,187 @@ import {
 
 import Header from "@/components/Header";
 import { COLORS } from "@/constants/colors";
+import { useAuth } from "@/lib/auth";
+import { getProfile, type Role } from "@/lib/profiles";
+
+type HomeAction = {
+  title: string;
+  description: string;
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  route: string;
+};
+
+const HOME_CONTENT: Record<
+  Role,
+  {
+    badge: string;
+    title: string;
+    subtitle: string;
+    actions: HomeAction[];
+  }
+> = {
+  student: {
+    badge: "STUDENT PORTAL",
+    title: "Your attendance, made simple.",
+    subtitle: "Scan event QR codes and keep track of your school activities.",
+    actions: [
+      {
+        title: "Scan Event QR",
+        description: "Record your attendance at an event.",
+        icon: "qr-code-outline",
+        route: "/scan",
+      },
+      {
+        title: "Attendance History",
+        description: "Review your previous attendance records.",
+        icon: "time-outline",
+        route: "/history",
+      },
+      {
+        title: "Teacher Verification",
+        description: "Request teacher access if needed.",
+        icon: "shield-checkmark-outline",
+        route: "/verification",
+      },
+      {
+        title: "My Profile",
+        description: "View your account information.",
+        icon: "person-outline",
+        route: "/profile",
+      },
+    ],
+  },
+  teacher: {
+    badge: "TEACHER PORTAL",
+    title: "Manage your school events.",
+    subtitle:
+      "Create events, display QR codes, manage event status, and review attendance.",
+    actions: [
+      {
+        title: "Event Management",
+        description: "Create and manage your events.",
+        icon: "calendar-outline",
+        route: "/teacher",
+      },
+      {
+        title: "Attendance History",
+        description: "View past attendance records for your events.",
+        icon: "time-outline",
+        route: "/history",
+      },
+      {
+        title: "My Profile",
+        description: "View your account information.",
+        icon: "person-outline",
+        route: "/profile",
+      },
+    ],
+  },
+  admin: {
+    badge: "ADMINISTRATOR PORTAL",
+    title: "Your school, at a glance.",
+    subtitle:
+      "Manage accounts, events, attendance records, and school reports.",
+    actions: [
+      {
+        title: "Admin Dashboard",
+        description: "Open your administrative management tools.",
+        icon: "grid-outline",
+        route: "/admin",
+      },
+      {
+        title: "My Profile",
+        description: "View your account information.",
+        icon: "person-outline",
+        route: "/profile",
+      },
+    ],
+  },
+};
 
 export default function Index() {
+  const { user, loading: authLoading } = useAuth();
+  const [role, setRole] = useState<Role | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadRole() {
+      if (!user?.id) {
+        if (active) {
+          setRole(null);
+          setLoadingProfile(false);
+        }
+        return;
+      }
+
+      setLoadingProfile(true);
+
+      try {
+        const profile = await getProfile(user.id);
+
+        if (active) {
+          setRole(profile?.role ?? "student");
+        }
+      } catch (error) {
+        console.error("HOME ROLE ERROR:", error);
+
+        if (active) {
+          setRole("student");
+        }
+      } finally {
+        if (active) {
+          setLoadingProfile(false);
+        }
+      }
+    }
+
+    void loadRole();
+
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
+
+  if (authLoading || loadingProfile) {
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={styles.loadingText}>Loading your dashboard...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (!user) {
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <Ionicons
+          name="person-circle-outline"
+          size={54}
+          color={COLORS.primary}
+        />
+        <Text style={styles.loadingTitle}>Sign in to continue</Text>
+        <Text style={styles.loadingText}>
+          Log in to access your personalized dashboard.
+        </Text>
+        <Pressable
+          onPress={() => router.replace("/login")}
+          style={styles.primaryButton}
+        >
+          <Text style={styles.primaryButtonText}>Go to Sign In</Text>
+        </Pressable>
+      </SafeAreaView>
+    );
+  }
+
+  const content = HOME_CONTENT[role ?? "student"];
+  const displayName =
+    user.user_metadata?.full_name ||
+    user.user_metadata?.name ||
+    user.email?.split("@")[0] ||
+    "there";
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
@@ -24,201 +205,99 @@ export default function Index() {
         </View>
 
         <View style={styles.welcomeCard}>
-          <View style={styles.welcomeTextContainer}>
-            <View style={styles.badge}>
-              <Ionicons
-                name="shield-checkmark"
-                size={14}
-                color={COLORS.primary}
-              />
-              <Text style={styles.badgeText}>QR-ATT SYSTEM</Text>
-            </View>
-
-            <Text style={styles.welcomeTitle}>Attendance, made simple.</Text>
-
-            <Text style={styles.welcomeSubtitle}>
-              A smarter way to record attendance at school events.
-            </Text>
+          <View style={styles.badge}>
+            <Ionicons
+              name={
+                role === "admin"
+                  ? "shield-checkmark"
+                  : role === "teacher"
+                    ? "school"
+                    : "person"
+              }
+              size={14}
+              color={COLORS.primary}
+            />
+            <Text style={styles.badgeText}>{content.badge}</Text>
           </View>
 
-          <View style={styles.heroIconContainer}>
-            <Ionicons name="qr-code" size={54} color={COLORS.primary} />
+          <Text style={styles.greeting}>Welcome, {displayName}!</Text>
+          <Text style={styles.welcomeTitle}>{content.title}</Text>
+          <Text style={styles.welcomeSubtitle}>{content.subtitle}</Text>
+
+          <View style={styles.heroIcon}>
+            <Ionicons
+              name={
+                role === "admin"
+                  ? "shield-checkmark-outline"
+                  : role === "teacher"
+                    ? "easel-outline"
+                    : "qr-code-outline"
+              }
+              size={44}
+              color={COLORS.primary}
+            />
           </View>
 
           <View style={styles.decorativeCircle} />
         </View>
 
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Get Started</Text>
+          <Text style={styles.sectionTitle}>Your Dashboard</Text>
           <Text style={styles.sectionSubtitle}>
-            What would you like to do today?
+            Choose what you would like to do.
           </Text>
         </View>
 
-        <View style={styles.scanCard}>
-          <View style={styles.scanIconContainer}>
-            <Ionicons
-              name="scan-outline"
-              size={30}
-              color={COLORS.textOnPrimary}
-            />
-          </View>
-
-          <View style={styles.scanTextContainer}>
-            <Text style={styles.scanTitle}>Scan Event QR Code</Text>
-            <Text style={styles.scanDescription}>
-              Record your attendance quickly and securely.
-            </Text>
-          </View>
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Open QR scanner"
-            onPress={() => router.push("/scan")}
-            style={({ pressed }) => [
-              styles.scanArrowButton,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Ionicons name="arrow-forward" size={22} color={COLORS.primary} />
-          </Pressable>
-        </View>
-
-        {/* Teacher Verification */}
-        <View style={styles.verificationSection}>
-          <View style={styles.verificationHeading}>
-            <Text style={styles.sectionTitle}>Teacher Verification</Text>
-            <Text style={styles.sectionSubtitle}>
-              Want to use teacher features?
-            </Text>
-          </View>
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Open teacher verification"
-            onPress={() => router.push("/verification")}
-            style={({ pressed }) => [
-              styles.verificationCard,
-              pressed && styles.pressed,
-            ]}
-          >
-            <View style={styles.verificationIcon}>
-              <Ionicons
-                name="shield-checkmark-outline"
-                size={27}
-                color={COLORS.primary}
-              />
-            </View>
-
-            <View style={styles.verificationTextContainer}>
-              <Text style={styles.verificationTitle}>
-                Request Teacher Access
-              </Text>
-
-              <Text style={styles.verificationSubtitle}>
-                Submit your details for administrator review.
-              </Text>
-
-              <View style={styles.verificationLinkRow}>
-                <Text style={styles.verificationLink}>Submit a request</Text>
-                <Ionicons
-                  name="chevron-forward"
-                  size={15}
-                  color={COLORS.primary}
-                />
+        <View style={styles.actions}>
+          {content.actions.map((action) => (
+            <Pressable
+              key={action.title}
+              accessibilityRole="button"
+              accessibilityLabel={action.title}
+              onPress={() => router.push(action.route as never)}
+              style={({ pressed }) => [
+                styles.actionCard,
+                pressed && styles.pressed,
+              ]}
+            >
+              <View style={styles.actionIcon}>
+                <Ionicons name={action.icon} size={26} color={COLORS.primary} />
               </View>
-            </View>
-          </Pressable>
-        </View>
 
-        <View style={styles.quickActionsHeader}>
-          <Text style={styles.sectionTitle}>Quick Access</Text>
-        </View>
+              <View style={styles.actionText}>
+                <Text style={styles.actionTitle}>{action.title}</Text>
+                <Text style={styles.actionDescription}>
+                  {action.description}
+                </Text>
+              </View>
 
-        <View style={styles.quickActions}>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => router.push("/history")}
-            style={({ pressed }) => [
-              styles.actionCard,
-              pressed && styles.pressed,
-            ]}
-          >
-            <View style={styles.actionIconHistory}>
-              <Ionicons name="time-outline" size={26} color={COLORS.primary} />
-            </View>
-
-            <Text style={styles.actionTitle}>History</Text>
-            <Text style={styles.actionDescription}>
-              View attendance records
-            </Text>
-
-            <View style={styles.actionFooter}>
-              <Text style={styles.actionLink}>View history</Text>
               <Ionicons
                 name="chevron-forward"
-                size={16}
+                size={21}
                 color={COLORS.primary}
               />
-            </View>
-          </Pressable>
-
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => router.push("/profile")}
-            style={({ pressed }) => [
-              styles.actionCard,
-              pressed && styles.pressed,
-            ]}
-          >
-            <View style={styles.actionIconProfile}>
-              <Ionicons
-                name="person-outline"
-                size={26}
-                color={COLORS.primary}
-              />
-            </View>
-
-            <Text style={styles.actionTitle}>My Profile</Text>
-            <Text style={styles.actionDescription}>
-              View your account details
-            </Text>
-
-            <View style={styles.actionFooter}>
-              <Text style={styles.actionLink}>View profile</Text>
-              <Ionicons
-                name="chevron-forward"
-                size={16}
-                color={COLORS.primary}
-              />
-            </View>
-          </Pressable>
+            </Pressable>
+          ))}
         </View>
 
         <View style={styles.infoCard}>
-          <View style={styles.infoIcon}>
-            <Ionicons
-              name="information-circle-outline"
-              size={22}
-              color={COLORS.primary}
-            />
-          </View>
-
-          <View style={styles.infoTextContainer}>
-            <Text style={styles.infoTitle}>Quick reminder</Text>
+          <Ionicons
+            name="information-circle-outline"
+            size={23}
+            color={COLORS.primary}
+          />
+          <View style={styles.infoText}>
+            <Text style={styles.infoTitle}>QR - ATT</Text>
             <Text style={styles.infoDescription}>
-              Make sure you scan the correct event's QR code and wait for the
-              attendance result before leaving the scanner.
+              Your school attendance companion. Available features depend on
+              your assigned account role.
             </Text>
           </View>
         </View>
 
-        <View style={styles.footer}>
-          <Ionicons name="checkmark-circle" size={15} color={COLORS.success} />
-          <Text style={styles.footerText}>
-            QR-ATT · Smart School Event Attendance
-          </Text>
-        </View>
+        <Text style={styles.footer}>
+          Lavender Attend · Smart School Event Attendance
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -229,304 +308,168 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 28,
+    gap: 12,
+  },
+  loadingTitle: {
+    fontSize: 21,
+    fontWeight: "800",
+    color: COLORS.textPrimary,
+    textAlign: "center",
+  },
+  loadingText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  primaryButton: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 14,
+    paddingHorizontal: 24,
+    paddingVertical: 13,
+    marginTop: 8,
+  },
+  primaryButtonText: {
+    color: COLORS.textOnPrimary,
+    fontSize: 14,
+    fontWeight: "800",
+  },
   scrollContent: {
     flexGrow: 1,
-    paddingBottom: 24,
+    paddingBottom: 28,
   },
-
   headerContainer: {
     paddingHorizontal: 4,
     paddingTop: 4,
     marginBottom: 12,
   },
-
   welcomeCard: {
     backgroundColor: COLORS.primarySoft,
     borderRadius: 24,
     marginHorizontal: 20,
     marginBottom: 28,
     padding: 22,
-    minHeight: 210,
-    flexDirection: "row",
-    alignItems: "center",
     overflow: "hidden",
     position: "relative",
   },
-
-  welcomeTextContainer: {
-    flex: 1,
-    zIndex: 1,
-    paddingRight: 4,
-  },
-
   badge: {
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "flex-start",
     backgroundColor: COLORS.card,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
     borderRadius: 20,
-    marginBottom: 18,
-    gap: 5,
+    gap: 6,
+    marginBottom: 17,
   },
-
   badgeText: {
     color: COLORS.primary,
     fontSize: 10,
     fontWeight: "800",
-    letterSpacing: 0.8,
+    letterSpacing: 0.7,
   },
-
+  greeting: {
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 7,
+  },
   welcomeTitle: {
     color: COLORS.textPrimary,
     fontSize: 25,
-    lineHeight: 31,
+    lineHeight: 32,
     fontWeight: "800",
     marginBottom: 9,
+    maxWidth: 280,
   },
-
   welcomeSubtitle: {
     color: COLORS.textSecondary,
     fontSize: 13,
     lineHeight: 20,
-    maxWidth: 230,
+    maxWidth: 290,
+    paddingRight: 8,
   },
-
-  heroIconContainer: {
-    width: 82,
-    height: 82,
-    borderRadius: 24,
+  heroIcon: {
+    width: 68,
+    height: 68,
+    borderRadius: 21,
     backgroundColor: COLORS.card,
-    alignItems: "center",
     justifyContent: "center",
-    marginLeft: 8,
-    zIndex: 1,
+    alignItems: "center",
+    marginTop: 20,
   },
-
   decorativeCircle: {
     position: "absolute",
-    width: 150,
-    height: 150,
-    borderRadius: 75,
+    width: 175,
+    height: 175,
+    borderRadius: 90,
     backgroundColor: COLORS.primaryLight,
-    opacity: 0.18,
-    right: -50,
+    opacity: 0.2,
+    right: -65,
     bottom: -75,
   },
-
   sectionHeader: {
     paddingHorizontal: 22,
-    marginBottom: 16,
+    marginBottom: 15,
   },
-
   sectionTitle: {
     color: COLORS.textPrimary,
     fontSize: 19,
     fontWeight: "800",
     marginBottom: 5,
   },
-
   sectionSubtitle: {
     color: COLORS.textSecondary,
     fontSize: 13,
   },
-
-  scanCard: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 20,
-    marginHorizontal: 20,
-    marginBottom: 28,
-    padding: 17,
-    flexDirection: "row",
-    alignItems: "center",
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    elevation: 4,
-  },
-
-  scanIconContainer: {
-    width: 54,
-    height: 54,
-    borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.18)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 13,
-  },
-
-  scanTextContainer: {
-    flex: 1,
-    paddingRight: 6,
-  },
-
-  scanTitle: {
-    color: COLORS.textOnPrimary,
-    fontSize: 15,
-    fontWeight: "800",
-    marginBottom: 6,
-  },
-
-  scanDescription: {
-    color: "#F0EAFE",
-    fontSize: 12,
-    lineHeight: 18,
-  },
-
-  scanArrowButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    backgroundColor: COLORS.card,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  verificationSection: {
-    marginBottom: 28,
-  },
-
-  verificationHeading: {
-    paddingHorizontal: 22,
-    marginBottom: 14,
-  },
-
-  verificationCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: COLORS.card,
-    borderRadius: 20,
-    marginHorizontal: 20,
-    padding: 17,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-
-  verificationIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    backgroundColor: COLORS.primarySoft,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 14,
-  },
-
-  verificationTextContainer: {
-    flex: 1,
-  },
-
-  verificationTitle: {
-    color: COLORS.textPrimary,
-    fontSize: 15,
-    fontWeight: "800",
-    marginBottom: 5,
-  },
-
-  verificationSubtitle: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-
-  verificationLinkRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 10,
-    gap: 4,
-  },
-
-  verificationLink: {
-    color: COLORS.primary,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-
-  quickActionsHeader: {
-    paddingHorizontal: 22,
-    marginBottom: 14,
-  },
-
-  quickActions: {
-    flexDirection: "row",
+  actions: {
     paddingHorizontal: 20,
     gap: 12,
     marginBottom: 24,
   },
-
   actionCard: {
-    flex: 1,
-    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: COLORS.card,
-    borderRadius: 20,
-    padding: 15,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: COLORS.border,
+    padding: 15,
+    gap: 13,
   },
-
-  actionIconHistory: {
-    width: 48,
-    height: 48,
+  actionIcon: {
+    width: 49,
+    height: 49,
     borderRadius: 15,
     backgroundColor: COLORS.primarySoft,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 15,
   },
-
-  actionIconProfile: {
-    width: 48,
-    height: 48,
-    borderRadius: 15,
-    backgroundColor: COLORS.surface,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 15,
+  actionText: {
+    flex: 1,
   },
-
   actionTitle: {
     color: COLORS.textPrimary,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "800",
-    marginBottom: 7,
+    marginBottom: 5,
   },
-
   actionDescription: {
     color: COLORS.textSecondary,
     fontSize: 12,
     lineHeight: 18,
-    minHeight: 36,
   },
-
-  actionFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 16,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-  },
-
-  actionLink: {
-    flex: 1,
-    color: COLORS.primary,
-    fontSize: 11,
-    fontWeight: "700",
-  },
-
   pressed: {
-    opacity: 0.78,
+    opacity: 0.75,
     transform: [{ scale: 0.99 }],
   },
-
   infoCard: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -538,45 +481,25 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
   },
-
-  infoIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: COLORS.primarySoft,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  infoTextContainer: {
+  infoText: {
     flex: 1,
   },
-
   infoTitle: {
     color: COLORS.textPrimary,
     fontSize: 14,
     fontWeight: "800",
     marginBottom: 5,
   },
-
   infoDescription: {
     color: COLORS.textSecondary,
     fontSize: 12,
     lineHeight: 19,
   },
-
   footer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 25,
-    paddingHorizontal: 20,
-  },
-
-  footerText: {
     color: COLORS.textMuted,
     fontSize: 11,
-    fontWeight: "500",
+    textAlign: "center",
+    marginTop: 24,
+    paddingHorizontal: 20,
   },
 });

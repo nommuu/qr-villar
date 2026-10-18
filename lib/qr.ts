@@ -29,17 +29,57 @@ export type ParseQRResult =
   | { ok: false; message: string };
 
 export function parseQRPayload(raw: string): ParseQRResult {
-  let parsed: any;
+  const value = raw.trim();
+
+  if (!value) {
+    return {
+      ok: false,
+      message: "Invalid QR code.",
+    };
+  }
 
   try {
-    parsed = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(value);
+
+    if (typeof parsed !== "object" || parsed === null) {
+      return {
+        ok: false,
+        message: "Not an attendance QR code.",
+      };
+    }
+
+    const payload = parsed as Record<string, unknown>;
+
+    if (
+      payload.v !== 1 ||
+      typeof payload.event !== "string" ||
+      !payload.event.trim()
+    ) {
+      return {
+        ok: false,
+        message: "Not an attendance QR code.",
+      };
+    }
+
+    return {
+      ok: true,
+      payload: {
+        v: 1,
+        event: payload.event,
+        ...(typeof payload.title === "string" ? { title: payload.title } : {}),
+        ...(typeof payload.start === "string" ? { start: payload.start } : {}),
+        ...(typeof payload.end === "string" ? { end: payload.end } : {}),
+      },
+    };
   } catch {
-    return { ok: false, message: "Invalid QR code." };
+    // Admin Dashboard QR codes may contain a plain event code,
+    // such as "VER - T012" or "HACK - E001".
+    return {
+      ok: true,
+      payload: {
+        v: 1,
+        event: value,
+      },
+    };
   }
-
-  if (parsed.v !== 1 || typeof parsed.event !== "string" || !parsed.event) {
-    return { ok: false, message: "Not an attendance QR code." };
-  }
-
-  return { ok: true, payload: parsed as QRPayload };
 }

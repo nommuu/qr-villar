@@ -6,6 +6,7 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -19,9 +20,10 @@ import QRCode from "react-native-qrcode-svg";
 import AppButton from "@/components/AppButton";
 import { COLORS } from "@/constants/colors";
 import { useAuth } from "@/lib/auth";
-import { createEvent } from "@/lib/events";
+import { createEvent, getEventsByTeacher, type CloudEvent } from "@/lib/events";
 import { getProfile, type Role } from "@/lib/profiles";
 import { buildQRPayload } from "@/lib/qr";
+import { supabase } from "@/lib/supabase";
 
 function toLocalISO(date: Date) {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -71,6 +73,55 @@ export default function TeacherScreen() {
   const [messageIsError, setMessageIsError] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  const [events, setEvents] = useState<CloudEvent[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(true);
+  const [updatingEventId, setUpdatingEventId] = useState<string | null>(null);
+
+  // Selected event for the QR code popup.
+  const [selectedQrEvent, setSelectedQrEvent] = useState<CloudEvent | null>(
+    null,
+  );
+
+  const showMessage = (text: string, isError = false) => {
+    setMessage(text);
+    setMessageIsError(isError);
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      const load = async () => {
+        if (!user?.id) {
+          if (active) {
+            setEvents([]);
+            setEventsLoading(false);
+          }
+          return;
+        }
+
+        if (active) setEventsLoading(true);
+
+        try {
+          const data = await getEventsByTeacher(user.id);
+          if (active) setEvents(data);
+        } catch {
+          if (active) {
+            showMessage("Could not load your events. Please try again.", true);
+          }
+        } finally {
+          if (active) setEventsLoading(false);
+        }
+      };
+
+      void load();
+
+      return () => {
+        active = false;
+      };
+    }, [user?.id]),
+  );
+
   useFocusEffect(
     useCallback(() => {
       let active = true;
@@ -105,9 +156,62 @@ export default function TeacherScreen() {
     }, [user]),
   );
 
-  const showMessage = (text: string, isError = false) => {
-    setMessage(text);
-    setMessageIsError(isError);
+  const handleToggleEventStatus = async (event: CloudEvent) => {
+    if (!user?.id || updatingEventId) return;
+
+    const newStatus: "open" | "closed" =
+      event.status === "open" ? "closed" : "open";
+
+    setUpdatingEventId(event.id);
+    setMessage(null);
+
+    try {
+      const { data, error } = await supabase
+        .from("events")
+        .update({ status: newStatus })
+        .eq("id", event.id)
+        .eq("created_by", user.id)
+        .select("id")
+        .maybeSingle();
+
+      if (error) {
+        showMessage(
+          `Could not ${newStatus === "open" ? "open" : "close"} this event: ${error.message}`,
+          true,
+        );
+        return;
+      }
+
+      if (!data) {
+        showMessage(
+          "No event was updated. Check that this event belongs to your account and that your Supabase policies allow teachers to update their own events.",
+          true,
+        );
+        return;
+      }
+
+      setEvents((current) =>
+        current.map((item) =>
+          item.id === event.id ? { ...item, status: newStatus } : item,
+        ),
+      );
+
+      // Keep the QR popup status current if it is open.
+      setSelectedQrEvent((current) =>
+        current?.id === event.id ? { ...current, status: newStatus } : current,
+      );
+
+      showMessage(
+        `Event ${newStatus === "open" ? "opened" : "closed"} successfully.`,
+      );
+    } catch {
+      showMessage(
+        "Something went wrong while updating the event status.",
+        true,
+      );
+    } finally {
+      setUpdatingEventId(null);
+    }
   };
 
   const openPicker = (target: EditTarget) => {
@@ -191,6 +295,12 @@ export default function TeacherScreen() {
       }
 
       setPayload(buildQRPayload(eventData));
+
+      if (user?.id) {
+        const refreshedEvents = await getEventsByTeacher(user.id);
+        setEvents(refreshedEvents);
+      }
+
       showMessage("Event created successfully! Your QR code is ready.");
     } catch {
       showMessage("Something went wrong while saving the event.", true);
@@ -217,7 +327,6 @@ export default function TeacherScreen() {
             size={42}
             color={COLORS.primary}
           />
-
           <View style={styles.lockBadge}>
             <Ionicons
               name="lock-closed"
@@ -228,7 +337,6 @@ export default function TeacherScreen() {
         </View>
 
         <Text style={styles.lockEyebrow}>RESTRICTED ACCESS</Text>
-
         <Text style={styles.lockTitle}>Teachers Only</Text>
 
         <Text style={styles.lockSubtitle}>
@@ -242,7 +350,6 @@ export default function TeacherScreen() {
             size={21}
             color={COLORS.primary}
           />
-
           <Text style={styles.lockNoticeText}>
             Contact your school administrator if you need teacher access.
           </Text>
@@ -271,7 +378,6 @@ export default function TeacherScreen() {
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTextContainer}>
           <Text style={styles.eyebrow}>TEACHER WORKSPACE</Text>
@@ -291,7 +397,6 @@ export default function TeacherScreen() {
         </View>
       </View>
 
-      {/* Quick guide */}
       <View style={styles.guideCard}>
         <View style={styles.guideIcon}>
           <Ionicons
@@ -310,12 +415,176 @@ export default function TeacherScreen() {
         </View>
       </View>
 
+      {/* My Events */}
+      <View style={styles.sectionHeader}>
+        <View style={styles.sectionIcon}>
+          <Ionicons name="albums-outline" size={21} color={COLORS.primary} />
+        </View>
+        <View style={styles.sectionHeadingText}>
+          <Text style={styles.sectionTitle}>My Events</Text>
+          <Text style={styles.sectionSubtitle}>
+            Manage your events, view their QR codes, and control attendance
+            availability.
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.formCard}>
+        {eventsLoading ? (
+          <View style={styles.eventsLoading}>
+            <ActivityIndicator size="small" color={COLORS.primary} />
+            <Text style={styles.hint}>Loading your events...</Text>
+          </View>
+        ) : events.length === 0 ? (
+          <View style={styles.emptyEvents}>
+            <Ionicons
+              name="calendar-clear-outline"
+              size={28}
+              color={COLORS.textMuted}
+            />
+            <Text style={styles.emptyEventsTitle}>No events yet</Text>
+            <Text style={styles.hint}>Events you create will appear here.</Text>
+          </View>
+        ) : (
+          events.map((event) => {
+            const isOpen = event.status === "open";
+            const isUpdating = updatingEventId === event.id;
+
+            return (
+              <View key={event.id} style={styles.eventManageCard}>
+                <View style={styles.eventManageHeader}>
+                  <View style={styles.eventManageIcon}>
+                    <Ionicons
+                      name="calendar-outline"
+                      size={20}
+                      color={COLORS.primary}
+                    />
+                  </View>
+
+                  <View style={styles.eventManageInfo}>
+                    <Text style={styles.eventManageTitle}>{event.title}</Text>
+                    <Text style={styles.eventManageCode}>
+                      Code: {event.event_code}
+                    </Text>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.statusPill,
+                      isOpen ? styles.statusOpen : styles.statusClosed,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.statusDot,
+                        isOpen ? styles.statusDotOpen : styles.statusDotClosed,
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        styles.statusText,
+                        isOpen
+                          ? styles.statusTextOpen
+                          : styles.statusTextClosed,
+                      ]}
+                    >
+                      {isOpen ? "OPEN" : "CLOSED"}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.eventManageDates}>
+                  <Ionicons
+                    name="time-outline"
+                    size={15}
+                    color={COLORS.textSecondary}
+                  />
+                  <Text style={styles.eventManageDateText}>
+                    {event.start_time
+                      ? new Date(event.start_time).toLocaleString()
+                      : "Start time not set"}
+                  </Text>
+                </View>
+
+                <View style={styles.eventManageDates}>
+                  <Ionicons
+                    name="flag-outline"
+                    size={15}
+                    color={COLORS.textSecondary}
+                  />
+                  <Text style={styles.eventManageDateText}>
+                    {event.end_time
+                      ? `Ends ${new Date(event.end_time).toLocaleString()}`
+                      : "End time not set"}
+                  </Text>
+                </View>
+
+                {/* View QR code for this existing event */}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`View QR code for ${event.title}`}
+                  onPress={() => setSelectedQrEvent(event)}
+                  style={({ pressed }) => [
+                    styles.viewQrButton,
+                    pressed && styles.statusActionPressed,
+                  ]}
+                >
+                  <Ionicons
+                    name="qr-code-outline"
+                    size={18}
+                    color={COLORS.primary}
+                  />
+                  <Text style={styles.viewQrButtonText}>View QR Code</Text>
+                </Pressable>
+
+                {/* Close / reopen event */}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={isOpen ? "Close event" : "Open event"}
+                  disabled={Boolean(updatingEventId)}
+                  onPress={() => void handleToggleEventStatus(event)}
+                  style={({ pressed }) => [
+                    styles.statusActionButton,
+                    isOpen ? styles.closeEventButton : styles.openEventButton,
+                    (pressed || isUpdating) && styles.statusActionPressed,
+                    Boolean(updatingEventId) &&
+                      !isUpdating &&
+                      styles.statusActionDisabled,
+                  ]}
+                >
+                  {isUpdating ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={COLORS.textOnPrimary}
+                    />
+                  ) : (
+                    <Ionicons
+                      name={
+                        isOpen ? "lock-closed-outline" : "lock-open-outline"
+                      }
+                      size={18}
+                      color={COLORS.textOnPrimary}
+                    />
+                  )}
+                  <Text style={styles.statusActionText}>
+                    {isUpdating
+                      ? "Updating..."
+                      : isOpen
+                        ? "Close Event"
+                        : "Open Event"}
+                  </Text>
+                </Pressable>
+              </View>
+            );
+          })
+        )}
+      </View>
+
       {/* Event details */}
       <View style={styles.sectionHeader}>
         <View style={styles.sectionIcon}>
           <Ionicons name="create-outline" size={21} color={COLORS.primary} />
         </View>
-
         <View style={styles.sectionHeadingText}>
           <Text style={styles.sectionTitle}>Event Details</Text>
           <Text style={styles.sectionSubtitle}>
@@ -333,7 +602,6 @@ export default function TeacherScreen() {
             size={19}
             color={COLORS.textMuted}
           />
-
           <TextInput
             style={styles.input}
             value={title}
@@ -353,7 +621,6 @@ export default function TeacherScreen() {
 
         <View style={styles.inputWrapper}>
           <Ionicons name="key-outline" size={19} color={COLORS.textMuted} />
-
           <TextInput
             style={styles.input}
             value={eventId}
@@ -387,7 +654,6 @@ export default function TeacherScreen() {
         <View style={styles.sectionIcon}>
           <Ionicons name="time-outline" size={21} color={COLORS.primary} />
         </View>
-
         <View style={styles.sectionHeadingText}>
           <Text style={styles.sectionTitle}>Event Schedule</Text>
           <Text style={styles.sectionSubtitle}>
@@ -398,7 +664,6 @@ export default function TeacherScreen() {
 
       <View style={styles.formCard}>
         <Text style={styles.label}>Start Date & Time</Text>
-
         <PickerField
           value={formatDateTime(startDate)}
           icon="play-circle-outline"
@@ -406,7 +671,6 @@ export default function TeacherScreen() {
         />
 
         <Text style={styles.label}>End Date & Time</Text>
-
         <PickerField
           value={formatDateTime(endDate)}
           icon="stop-circle-outline"
@@ -448,7 +712,6 @@ export default function TeacherScreen() {
             <Text style={styles.pickerHeaderTitle}>
               {editTarget === "start" ? "Event Start" : "Event End"}
             </Text>
-
             <Pressable
               accessibilityRole="button"
               onPress={() => {
@@ -498,13 +761,10 @@ export default function TeacherScreen() {
             size={22}
             color={messageIsError ? COLORS.danger : COLORS.success}
           />
-
           <Text
             style={[
               styles.messageText,
-              {
-                color: messageIsError ? COLORS.danger : COLORS.success,
-              },
+              { color: messageIsError ? COLORS.danger : COLORS.success },
             ]}
           >
             {message}
@@ -530,7 +790,7 @@ export default function TeacherScreen() {
         )}
       </View>
 
-      {/* Generated QR */}
+      {/* Generated QR for a newly created event */}
       {payload && (
         <View style={styles.resultCard}>
           <View style={styles.resultHeader}>
@@ -541,7 +801,6 @@ export default function TeacherScreen() {
                 color={COLORS.success}
               />
             </View>
-
             <View style={styles.resultHeaderText}>
               <Text style={styles.resultTitle}>Your Event QR Is Ready</Text>
               <Text style={styles.resultSubtitle}>
@@ -568,7 +827,6 @@ export default function TeacherScreen() {
                 size={18}
                 color={COLORS.primary}
               />
-
               <View style={styles.summaryTextContainer}>
                 <Text style={styles.summaryLabel}>EVENT TITLE</Text>
                 <Text style={styles.summaryValue}>{title.trim()}</Text>
@@ -579,7 +837,6 @@ export default function TeacherScreen() {
 
             <View style={styles.summaryRow}>
               <Ionicons name="key-outline" size={18} color={COLORS.primary} />
-
               <View style={styles.summaryTextContainer}>
                 <Text style={styles.summaryLabel}>EVENT CODE</Text>
                 <Text style={styles.summaryValue}>{eventId.trim()}</Text>
@@ -590,7 +847,6 @@ export default function TeacherScreen() {
 
             <View style={styles.summaryRow}>
               <Ionicons name="time-outline" size={18} color={COLORS.primary} />
-
               <View style={styles.summaryTextContainer}>
                 <Text style={styles.summaryLabel}>SCHEDULE</Text>
                 <Text style={styles.summaryValue}>
@@ -642,6 +898,106 @@ export default function TeacherScreen() {
           QR-ATT · Smart School Event Attendance Management System
         </Text>
       </View>
+
+      {/* QR popup for any existing event */}
+      <Modal
+        visible={selectedQrEvent !== null}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setSelectedQrEvent(null)}
+      >
+        <View style={styles.qrModalOverlay}>
+          <View style={styles.qrModalCard}>
+            <View style={styles.qrModalHeader}>
+              <View style={styles.qrModalHeadingText}>
+                <Text style={styles.qrModalTitle}>Event QR Code</Text>
+                <Text style={styles.qrModalSubtitle}>
+                  Students can scan this code to record attendance.
+                </Text>
+              </View>
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close QR code popup"
+                onPress={() => setSelectedQrEvent(null)}
+                hitSlop={10}
+              >
+                <Ionicons
+                  name="close-circle"
+                  size={28}
+                  color={COLORS.textSecondary}
+                />
+              </Pressable>
+            </View>
+
+            {selectedQrEvent && (
+              <>
+                <View style={styles.qrModalCodeBox}>
+                  <QRCode
+                    value={buildQRPayload({
+                      eventId: selectedQrEvent.event_code,
+                      title: selectedQrEvent.title,
+                      start: selectedQrEvent.start_time ?? undefined,
+                      end: selectedQrEvent.end_time ?? undefined,
+                    })}
+                    size={220}
+                    color="#27213B"
+                    backgroundColor="#FFFFFF"
+                  />
+                </View>
+
+                <Text style={styles.qrModalEventTitle}>
+                  {selectedQrEvent.title}
+                </Text>
+
+                <Text style={styles.qrModalEventCode}>
+                  Event Code: {selectedQrEvent.event_code}
+                </Text>
+
+                <View
+                  style={[
+                    styles.qrModalStatus,
+                    selectedQrEvent.status === "closed"
+                      ? styles.statusClosed
+                      : styles.statusOpen,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.statusText,
+                      selectedQrEvent.status === "closed"
+                        ? styles.statusTextClosed
+                        : styles.statusTextOpen,
+                    ]}
+                  >
+                    {selectedQrEvent.status === "closed"
+                      ? "EVENT CLOSED"
+                      : "EVENT OPEN"}
+                  </Text>
+                </View>
+
+                <Text style={styles.qrModalHint}>
+                  {selectedQrEvent.status === "closed"
+                    ? "This event is closed. Reopen it to allow attendance scanning, subject to the event schedule."
+                    : "Display this QR code for students to scan during the event."}
+                </Text>
+
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setSelectedQrEvent(null)}
+                  style={({ pressed }) => [
+                    styles.qrModalCloseButton,
+                    pressed && styles.statusActionPressed,
+                  ]}
+                >
+                  <Text style={styles.qrModalCloseButtonText}>Done</Text>
+                </Pressable>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -665,9 +1021,7 @@ function PickerField({ value, icon, onPress }: PickerFieldProps) {
       <View style={styles.pickerFieldIcon}>
         <Ionicons name={icon} size={21} color={COLORS.primary} />
       </View>
-
       <Text style={styles.pickerValue}>{value}</Text>
-
       <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />
     </Pressable>
   );
@@ -678,13 +1032,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-
   content: {
     paddingHorizontal: 20,
     paddingTop: 22,
     paddingBottom: 36,
   },
-
   header: {
     backgroundColor: COLORS.primary,
     borderRadius: 24,
@@ -695,12 +1047,10 @@ const styles = StyleSheet.create({
     marginBottom: 18,
     overflow: "hidden",
   },
-
   headerTextContainer: {
     flex: 1,
     paddingRight: 12,
   },
-
   eyebrow: {
     color: "#E7DEFF",
     fontSize: 10,
@@ -708,20 +1058,17 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     marginBottom: 8,
   },
-
   title: {
     fontSize: 27,
     fontWeight: "800",
     color: COLORS.textOnPrimary,
     marginBottom: 7,
   },
-
   subtitle: {
     fontSize: 13,
     lineHeight: 20,
     color: "#F0EBFF",
   },
-
   headerIcon: {
     width: 62,
     height: 62,
@@ -730,7 +1077,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
   guideCard: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -741,7 +1087,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-
   guideIcon: {
     width: 38,
     height: 38,
@@ -751,30 +1096,25 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 12,
   },
-
   guideTextContainer: {
     flex: 1,
   },
-
   guideTitle: {
     fontSize: 14,
     fontWeight: "800",
     color: COLORS.textPrimary,
     marginBottom: 4,
   },
-
   guideText: {
     fontSize: 12,
     lineHeight: 18,
     color: COLORS.textSecondary,
   },
-
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 12,
   },
-
   sectionIcon: {
     width: 42,
     height: 42,
@@ -784,24 +1124,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 12,
   },
-
   sectionHeadingText: {
     flex: 1,
   },
-
   sectionTitle: {
     fontSize: 17,
     fontWeight: "800",
     color: COLORS.textPrimary,
   },
-
   sectionSubtitle: {
     fontSize: 12,
     lineHeight: 18,
     color: COLORS.textSecondary,
     marginTop: 2,
   },
-
   formCard: {
     backgroundColor: COLORS.card,
     borderRadius: 20,
@@ -815,7 +1151,6 @@ const styles = StyleSheet.create({
     shadowRadius: 9,
     elevation: 2,
   },
-
   label: {
     fontSize: 13,
     fontWeight: "700",
@@ -823,7 +1158,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginTop: 9,
   },
-
   inputWrapper: {
     minHeight: 51,
     flexDirection: "row",
@@ -834,7 +1168,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
     paddingHorizontal: 13,
   },
-
   input: {
     flex: 1,
     minWidth: 0,
@@ -843,13 +1176,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.textPrimary,
   },
-
   fieldHint: {
     flexDirection: "row",
     alignItems: "center",
     marginTop: 10,
   },
-
   fieldHintText: {
     flex: 1,
     fontSize: 11,
@@ -857,7 +1188,6 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginLeft: 6,
   },
-
   pickerField: {
     minHeight: 64,
     backgroundColor: COLORS.background,
@@ -870,11 +1200,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 6,
   },
-
   pickerFieldPressed: {
     backgroundColor: COLORS.primarySoft,
   },
-
   pickerFieldIcon: {
     width: 38,
     height: 38,
@@ -884,7 +1212,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 10,
   },
-
   pickerValue: {
     flex: 1,
     fontSize: 13,
@@ -893,7 +1220,6 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     marginRight: 7,
   },
-
   quickLabel: {
     fontSize: 10,
     fontWeight: "800",
@@ -902,13 +1228,11 @@ const styles = StyleSheet.create({
     marginTop: 15,
     marginBottom: 10,
   },
-
   chipRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
   },
-
   chip: {
     flexDirection: "row",
     alignItems: "center",
@@ -920,24 +1244,20 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     gap: 5,
   },
-
   chipPressed: {
     opacity: 0.7,
   },
-
   chipText: {
     fontSize: 12,
     fontWeight: "700",
     color: COLORS.primary,
   },
-
   hint: {
     fontSize: 11,
     lineHeight: 17,
     color: COLORS.textSecondary,
     marginTop: 10,
   },
-
   pickerContainer: {
     backgroundColor: COLORS.card,
     borderRadius: 18,
@@ -947,7 +1267,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     alignItems: "center",
   },
-
   pickerHeader: {
     width: "100%",
     flexDirection: "row",
@@ -955,20 +1274,17 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 8,
   },
-
   pickerHeaderTitle: {
     fontSize: 15,
     fontWeight: "800",
     color: COLORS.textPrimary,
   },
-
   pickerHint: {
     fontSize: 12,
     color: COLORS.textSecondary,
     textAlign: "center",
     marginTop: 8,
   },
-
   messageCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -977,26 +1293,21 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     gap: 10,
   },
-
   errorMessage: {
     backgroundColor: COLORS.dangerBackground,
   },
-
   successMessage: {
     backgroundColor: COLORS.successBackground,
   },
-
   messageText: {
     flex: 1,
     fontSize: 13,
     lineHeight: 19,
     fontWeight: "600",
   },
-
   createButtonContainer: {
     marginTop: 3,
   },
-
   savingIndicator: {
     flexDirection: "row",
     justifyContent: "center",
@@ -1005,12 +1316,10 @@ const styles = StyleSheet.create({
     marginTop: 3,
     marginBottom: 12,
   },
-
   savingText: {
     fontSize: 12,
     color: COLORS.textSecondary,
   },
-
   resultCard: {
     backgroundColor: COLORS.card,
     borderRadius: 22,
@@ -1024,13 +1333,11 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 3,
   },
-
   resultHeader: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 18,
   },
-
   resultIcon: {
     width: 45,
     height: 45,
@@ -1040,24 +1347,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 12,
   },
-
   resultHeaderText: {
     flex: 1,
   },
-
   resultTitle: {
     fontSize: 17,
     fontWeight: "800",
     color: COLORS.textPrimary,
   },
-
   resultSubtitle: {
     fontSize: 12,
     lineHeight: 18,
     color: COLORS.textSecondary,
     marginTop: 4,
   },
-
   qrContainer: {
     alignItems: "center",
     paddingVertical: 20,
@@ -1065,7 +1368,6 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     marginBottom: 18,
   },
-
   qrBox: {
     backgroundColor: "#FFFFFF",
     padding: 14,
@@ -1073,25 +1375,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-
   eventSummary: {
     backgroundColor: COLORS.background,
     borderRadius: 16,
     paddingHorizontal: 13,
     paddingVertical: 4,
   },
-
   summaryRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     paddingVertical: 13,
     gap: 11,
   },
-
   summaryTextContainer: {
     flex: 1,
   },
-
   summaryLabel: {
     fontSize: 10,
     fontWeight: "800",
@@ -1099,25 +1397,21 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginBottom: 4,
   },
-
   summaryValue: {
     fontSize: 13,
     fontWeight: "700",
     color: COLORS.textPrimary,
     lineHeight: 19,
   },
-
   summarySecondary: {
     fontSize: 12,
     color: COLORS.textSecondary,
     marginTop: 3,
   },
-
   summaryDivider: {
     height: 1,
     backgroundColor: COLORS.border,
   },
-
   qrNote: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -1127,14 +1421,12 @@ const styles = StyleSheet.create({
     marginTop: 15,
     gap: 9,
   },
-
   qrNoteText: {
     flex: 1,
     fontSize: 12,
     lineHeight: 18,
     color: COLORS.textSecondary,
   },
-
   newEventButton: {
     minHeight: 48,
     flexDirection: "row",
@@ -1147,17 +1439,14 @@ const styles = StyleSheet.create({
     marginTop: 14,
     gap: 8,
   },
-
   newEventButtonPressed: {
     backgroundColor: COLORS.primarySoft,
   },
-
   newEventButtonText: {
     fontSize: 13,
     fontWeight: "700",
     color: COLORS.primary,
   },
-
   lockContainer: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -1166,7 +1455,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     paddingVertical: 32,
   },
-
   lockIconCircle: {
     width: 100,
     height: 100,
@@ -1179,7 +1467,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     position: "relative",
   },
-
   lockBadge: {
     position: "absolute",
     right: -5,
@@ -1193,7 +1480,6 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: COLORS.background,
   },
-
   lockEyebrow: {
     fontSize: 10,
     fontWeight: "800",
@@ -1202,7 +1488,6 @@ const styles = StyleSheet.create({
     marginBottom: 5,
     textAlign: "center",
   },
-
   lockTitle: {
     fontSize: 25,
     fontWeight: "800",
@@ -1210,7 +1495,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textAlign: "center",
   },
-
   lockSubtitle: {
     fontSize: 14,
     color: COLORS.textSecondary,
@@ -1219,7 +1503,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     maxWidth: 340,
   },
-
   lockNotice: {
     width: "100%",
     maxWidth: 340,
@@ -1233,14 +1516,12 @@ const styles = StyleSheet.create({
     marginTop: 25,
     gap: 10,
   },
-
   lockNoticeText: {
     flex: 1,
     fontSize: 12,
     color: COLORS.textSecondary,
     lineHeight: 19,
   },
-
   lockFooter: {
     flexDirection: "row",
     alignItems: "center",
@@ -1248,13 +1529,11 @@ const styles = StyleSheet.create({
     gap: 6,
     marginTop: 28,
   },
-
   lockFooterText: {
     fontSize: 10,
     color: COLORS.textMuted,
     textAlign: "center",
   },
-
   footer: {
     flexDirection: "row",
     alignItems: "center",
@@ -1263,10 +1542,240 @@ const styles = StyleSheet.create({
     marginTop: 25,
     paddingHorizontal: 5,
   },
-
   footerText: {
     fontSize: 10,
     color: COLORS.textMuted,
     textAlign: "center",
+  },
+  eventsLoading: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 20,
+  },
+  emptyEvents: {
+    alignItems: "center",
+    paddingVertical: 22,
+  },
+  emptyEventsTitle: {
+    marginTop: 8,
+    fontSize: 14,
+    fontWeight: "800",
+    color: COLORS.textPrimary,
+  },
+  eventManageCard: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.background,
+    borderRadius: 16,
+    padding: 13,
+    marginBottom: 12,
+  },
+  eventManageHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+  },
+  eventManageIcon: {
+    width: 39,
+    height: 39,
+    borderRadius: 12,
+    backgroundColor: COLORS.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  eventManageInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  eventManageTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: COLORS.textPrimary,
+  },
+  eventManageCode: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    marginTop: 3,
+  },
+  statusPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  statusOpen: {
+    backgroundColor: COLORS.successBackground,
+  },
+  statusClosed: {
+    backgroundColor: COLORS.dangerBackground,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusDotOpen: {
+    backgroundColor: COLORS.success,
+  },
+  statusDotClosed: {
+    backgroundColor: COLORS.danger,
+  },
+  statusText: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
+  statusTextOpen: {
+    color: COLORS.success,
+  },
+  statusTextClosed: {
+    color: COLORS.danger,
+  },
+  eventManageDates: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 7,
+    marginTop: 10,
+  },
+  eventManageDateText: {
+    flex: 1,
+    fontSize: 11,
+    lineHeight: 16,
+    color: COLORS.textSecondary,
+  },
+  viewQrButton: {
+    minHeight: 43,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.primarySoft,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 13,
+    paddingHorizontal: 12,
+  },
+  viewQrButtonText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: COLORS.primary,
+  },
+  statusActionButton: {
+    minHeight: 43,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 9,
+    paddingHorizontal: 12,
+  },
+  closeEventButton: {
+    backgroundColor: COLORS.danger,
+  },
+  openEventButton: {
+    backgroundColor: COLORS.primary,
+  },
+  statusActionPressed: {
+    opacity: 0.78,
+  },
+  statusActionDisabled: {
+    opacity: 0.45,
+  },
+  statusActionText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: COLORS.textOnPrimary,
+  },
+
+  // Existing-event QR popup
+  qrModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(20, 15, 30, 0.68)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  qrModalCard: {
+    width: "100%",
+    maxWidth: 380,
+    maxHeight: "90%",
+    backgroundColor: COLORS.card,
+    borderRadius: 24,
+    padding: 20,
+    alignItems: "center",
+  },
+  qrModalHeader: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    marginBottom: 20,
+  },
+  qrModalHeadingText: {
+    flex: 1,
+  },
+  qrModalTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: COLORS.textPrimary,
+  },
+  qrModalSubtitle: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: COLORS.textSecondary,
+    marginTop: 5,
+  },
+  qrModalCodeBox: {
+    backgroundColor: "#FFFFFF",
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  qrModalEventTitle: {
+    marginTop: 18,
+    fontSize: 17,
+    fontWeight: "800",
+    color: COLORS.textPrimary,
+    textAlign: "center",
+  },
+  qrModalEventCode: {
+    marginTop: 6,
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    textAlign: "center",
+  },
+  qrModalStatus: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    marginTop: 12,
+  },
+  qrModalHint: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    marginTop: 12,
+  },
+  qrModalCloseButton: {
+    width: "100%",
+    minHeight: 46,
+    borderRadius: 14,
+    backgroundColor: COLORS.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 20,
+  },
+  qrModalCloseButtonText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: COLORS.textOnPrimary,
   },
 });

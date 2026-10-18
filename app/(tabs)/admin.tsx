@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import QRCode from "react-native-qrcode-svg";
 
 import { COLORS } from "@/constants/colors";
 import {
@@ -43,6 +44,7 @@ type DashboardSection =
   | "events"
   | "attendance"
   | "reports";
+type ActiveSection = "home" | DashboardSection;
 
 export default function AdminScreen(): React.JSX.Element {
   const { user } = useAuth();
@@ -55,6 +57,12 @@ export default function AdminScreen(): React.JSX.Element {
     attendance: 0,
     reports: 0,
   });
+
+  const [activeSection, setActiveSection] = useState<ActiveSection>("home");
+  const [selectedQrEvent, setSelectedQrEvent] = useState<CloudEvent | null>(
+    null,
+  );
+  const [showQrModal, setShowQrModal] = useState(false);
 
   const [role, setRole] = useState<Role | null>(null);
   const [loading, setLoading] = useState(true);
@@ -107,10 +115,8 @@ export default function AdminScreen(): React.JSX.Element {
   );
 
   const navigateToSection = useCallback((section: DashboardSection): void => {
-    scrollViewRef.current?.scrollTo({
-      y: Math.max(sectionPositions.current[section] - 12, 0),
-      animated: true,
-    });
+    setActiveSection(section);
+    scrollViewRef.current?.scrollTo({ y: 0, animated: false });
   }, []);
 
   // LOAD ADMIN ROLE
@@ -356,6 +362,16 @@ export default function AdminScreen(): React.JSX.Element {
   };
 
   // EVENT MANAGEMENT
+  const handleOpenQrModal = (event: CloudEvent): void => {
+    setSelectedQrEvent(event);
+    setShowQrModal(true);
+  };
+
+  const handleCloseQrModal = (): void => {
+    setShowQrModal(false);
+    setSelectedQrEvent(null);
+  };
+
   const handleChangeEventStatus = async (
     event: CloudEvent,
     newStatus: "open" | "closed",
@@ -623,7 +639,7 @@ export default function AdminScreen(): React.JSX.Element {
             color={COLORS.textMuted}
           />
           <Text style={styles.lockFooterText}>
-            Lavender Attend · Protected Administration Workspace
+            QR - ATT · Protected Administration Workspace
           </Text>
         </View>
       </View>
@@ -637,627 +653,683 @@ export default function AdminScreen(): React.JSX.Element {
         style={styles.container}
         contentContainerStyle={styles.content}
       >
-        <Text style={styles.title}>Admin Dashboard</Text>
-        <Text style={styles.subtitle}>Lavender Attend Management System.</Text>
+        <Text style={styles.title}>
+          {activeSection === "home"
+            ? "Admin Dashboard"
+            : {
+                users: "User Management",
+                verification: "Teacher Verification",
+                events: "Event Management",
+                attendance: "Attendance Management",
+                reports: "Reports",
+              }[activeSection]}
+        </Text>
+        <Text style={styles.subtitle}>
+          {activeSection === "home"
+            ? "QR - ATT Management System."
+            : "Manage this section of QR - ATT."}
+        </Text>
 
-        {/* QUICK NAVIGATION */}
-        <View style={styles.quickNavCard}>
-          <View style={styles.quickNavHeader}>
-            <View>
-              <Text style={styles.quickNavTitle}>Quick Navigation</Text>
-              <Text style={styles.quickNavSubtitle}>
-                Your administration shortcuts
-              </Text>
+        {activeSection !== "home" && (
+          <TouchableOpacity
+            style={styles.backToDashboardButton}
+            onPress={() => setActiveSection("home")}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="arrow-back" size={18} color={COLORS.primary} />
+            <Text style={styles.backToDashboardText}>Back to Dashboard</Text>
+          </TouchableOpacity>
+        )}
+
+        {activeSection === "home" && (
+          <View style={styles.quickNavCard}>
+            <View style={styles.quickNavHeader}>
+              <View>
+                <Text style={styles.quickNavTitle}>Quick Navigation</Text>
+                <Text style={styles.quickNavSubtitle}>
+                  Your administration shortcuts
+                </Text>
+              </View>
+
+              <View style={styles.quickNavHeaderIcon}>
+                <Ionicons
+                  name="apps-outline"
+                  size={22}
+                  color={COLORS.primary}
+                />
+              </View>
             </View>
 
-            <View style={styles.quickNavHeaderIcon}>
-              <Ionicons name="apps-outline" size={22} color={COLORS.primary} />
+            <View style={styles.quickNavGrid}>
+              <QuickNavButton
+                title="Users"
+                subtitle={`${users.length} accounts`}
+                icon="people-outline"
+                onPress={() => navigateToSection("users")}
+              />
+
+              <QuickNavButton
+                title="Teacher Verification"
+                subtitle={`${verificationRequests.length} pending`}
+                icon="shield-checkmark-outline"
+                onPress={() => navigateToSection("verification")}
+              />
+
+              <QuickNavButton
+                title="Events"
+                subtitle={`${events.length} events`}
+                icon="calendar-outline"
+                onPress={() => navigateToSection("events")}
+              />
+
+              <QuickNavButton
+                title="Attendance"
+                subtitle={`${attendance.length} records`}
+                icon="clipboard-outline"
+                onPress={() => navigateToSection("attendance")}
+              />
+
+              <QuickNavButton
+                title="Reports"
+                subtitle="Analytics & exports"
+                icon="stats-chart-outline"
+                onPress={() => navigateToSection("reports")}
+              />
             </View>
           </View>
+        )}
 
-          <View style={styles.quickNavGrid}>
-            <QuickNavButton
-              title="Users"
-              subtitle={`${users.length} accounts`}
-              icon="people-outline"
-              onPress={() => navigateToSection("users")}
-            />
+        {activeSection === "users" && (
+          <View
+            style={styles.card}
+            onLayout={(event) =>
+              recordSectionPosition("users", event.nativeEvent.layout.y)
+            }
+          >
+            <Text style={styles.cardTitle}>User Management</Text>
+            <Text style={styles.cardDescription}>
+              View and manage student, teacher, and administrator accounts.
+            </Text>
 
-            <QuickNavButton
-              title="Teacher Verification"
-              subtitle={`${verificationRequests.length} pending`}
-              icon="shield-checkmark-outline"
-              onPress={() => navigateToSection("verification")}
-            />
+            <View style={styles.divider} />
 
-            <QuickNavButton
-              title="Events"
-              subtitle={`${events.length} events`}
-              icon="calendar-outline"
-              onPress={() => navigateToSection("events")}
-            />
+            <Text style={styles.sectionTitle}>
+              Registered Users ({users.length})
+            </Text>
 
-            <QuickNavButton
-              title="Attendance"
-              subtitle={`${attendance.length} records`}
-              icon="clipboard-outline"
-              onPress={() => navigateToSection("attendance")}
-            />
-
-            <QuickNavButton
-              title="Reports"
-              subtitle="Analytics & exports"
-              icon="stats-chart-outline"
-              onPress={() => navigateToSection("reports")}
-            />
-          </View>
-        </View>
-
-        {/* USER MANAGEMENT */}
-        <View
-          style={styles.card}
-          onLayout={(event) =>
-            recordSectionPosition("users", event.nativeEvent.layout.y)
-          }
-        >
-          <Text style={styles.cardTitle}>User Management</Text>
-          <Text style={styles.cardDescription}>
-            View and manage student, teacher, and administrator accounts.
-          </Text>
-
-          <View style={styles.divider} />
-
-          <Text style={styles.sectionTitle}>
-            Registered Users ({users.length})
-          </Text>
-
-          {loadingUsers ? (
-            <Text style={styles.loadingText}>Loading users...</Text>
-          ) : users.length === 0 ? (
-            <Text style={styles.emptyText}>No users found.</Text>
-          ) : (
-            users.map((profile) => (
-              <View key={profile.id} style={styles.userItem}>
-                <View style={styles.userInfo}>
-                  <Text style={styles.userName}>
-                    {profile.full_name || "No name"}
-                  </Text>
-                  <Text style={styles.userEmail}>{profile.email}</Text>
-                  <Text style={styles.userId} numberOfLines={1}>
-                    ID: {profile.id}
-                  </Text>
-                </View>
-
-                <View style={styles.userActions}>
-                  <View style={styles.roleBadge}>
-                    <Text style={styles.roleBadgeText}>
-                      {getRoleLabel(profile.role)}
+            {loadingUsers ? (
+              <Text style={styles.loadingText}>Loading users...</Text>
+            ) : users.length === 0 ? (
+              <Text style={styles.emptyText}>No users found.</Text>
+            ) : (
+              users.map((profile) => (
+                <View key={profile.id} style={styles.userItem}>
+                  <View style={styles.userInfo}>
+                    <Text style={styles.userName}>
+                      {profile.full_name || "No name"}
+                    </Text>
+                    <Text style={styles.userEmail}>{profile.email}</Text>
+                    <Text style={styles.userId} numberOfLines={1}>
+                      ID: {profile.id}
                     </Text>
                   </View>
 
-                  <TouchableOpacity
-                    style={styles.editRoleButton}
-                    disabled={updatingUser === profile.id}
-                    onPress={() => handleOpenRoleModal(profile)}
-                  >
-                    <Text style={styles.editRoleButtonText}>
-                      {updatingUser === profile.id
-                        ? "Updating..."
-                        : "Edit Role"}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))
-          )}
-        </View>
+                  <View style={styles.userActions}>
+                    <View style={styles.roleBadge}>
+                      <Text style={styles.roleBadgeText}>
+                        {getRoleLabel(profile.role)}
+                      </Text>
+                    </View>
 
-        {/* TEACHER VERIFICATION */}
-        <View
-          style={styles.card}
-          onLayout={(event) =>
-            recordSectionPosition("verification", event.nativeEvent.layout.y)
-          }
-        >
-          <View style={styles.verificationHeader}>
-            <View style={styles.verificationHeaderIcon}>
+                    <TouchableOpacity
+                      style={styles.editRoleButton}
+                      disabled={updatingUser === profile.id}
+                      onPress={() => handleOpenRoleModal(profile)}
+                    >
+                      <Text style={styles.editRoleButtonText}>
+                        {updatingUser === profile.id
+                          ? "Updating..."
+                          : "Edit Role"}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))
+            )}
+          </View>
+        )}
+
+        {activeSection === "verification" && (
+          <View
+            style={styles.card}
+            onLayout={(event) =>
+              recordSectionPosition("verification", event.nativeEvent.layout.y)
+            }
+          >
+            <View style={styles.verificationHeader}>
+              <View style={styles.verificationHeaderIcon}>
+                <Ionicons
+                  name="shield-checkmark-outline"
+                  size={25}
+                  color={COLORS.primary}
+                />
+              </View>
+
+              <View style={styles.verificationHeaderText}>
+                <Text style={styles.cardTitle}>Teacher Verification</Text>
+                <Text style={styles.cardDescription}>
+                  Review student requests for teacher access.
+                </Text>
+              </View>
+
+              <View style={styles.pendingBadge}>
+                <Text style={styles.pendingBadgeText}>
+                  {verificationRequests.length}
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.refreshButton}
+              disabled={loadingVerification}
+              onPress={() => void loadVerificationRequests()}
+            >
               <Ionicons
-                name="shield-checkmark-outline"
-                size={25}
+                name="refresh-outline"
+                size={17}
                 color={COLORS.primary}
               />
-            </View>
-
-            <View style={styles.verificationHeaderText}>
-              <Text style={styles.cardTitle}>Teacher Verification</Text>
-              <Text style={styles.cardDescription}>
-                Review student requests for teacher access.
-              </Text>
-            </View>
-
-            <View style={styles.pendingBadge}>
-              <Text style={styles.pendingBadgeText}>
-                {verificationRequests.length}
-              </Text>
-            </View>
-          </View>
-
-          <TouchableOpacity
-            style={styles.refreshButton}
-            disabled={loadingVerification}
-            onPress={() => void loadVerificationRequests()}
-          >
-            <Ionicons name="refresh-outline" size={17} color={COLORS.primary} />
-            <Text style={styles.refreshButtonText}>
-              {loadingVerification ? "Refreshing..." : "Refresh Requests"}
-            </Text>
-          </TouchableOpacity>
-
-          <View style={styles.divider} />
-
-          {loadingVerification ? (
-            <Text style={styles.loadingText}>
-              Loading teacher verification requests...
-            </Text>
-          ) : verificationRequests.length === 0 ? (
-            <View style={styles.emptyVerification}>
-              <Ionicons
-                name="checkmark-circle-outline"
-                size={35}
-                color={COLORS.success}
-              />
-              <Text style={styles.emptyVerificationTitle}>
-                No pending requests
-              </Text>
-              <Text style={styles.emptyVerificationText}>
-                New teacher verification requests will appear here.
-              </Text>
-            </View>
-          ) : (
-            verificationRequests.map((request) => {
-              const isReviewing = reviewingRequest === request.id;
-
-              return (
-                <View key={request.id} style={styles.verificationItem}>
-                  <View style={styles.verificationItemTop}>
-                    <View style={styles.verificationItemIcon}>
-                      <Ionicons
-                        name="person-outline"
-                        size={21}
-                        color={COLORS.primary}
-                      />
-                    </View>
-
-                    <View style={styles.verificationItemIdentity}>
-                      <Text style={styles.verificationItemTitle}>
-                        Teacher Access Request
-                      </Text>
-                      <Text style={styles.verificationItemDate}>
-                        Submitted: {formatDateTime(request.created_at)}
-                      </Text>
-                    </View>
-
-                    <View style={styles.pendingStatusBadge}>
-                      <Text style={styles.pendingStatusText}>Pending</Text>
-                    </View>
-                  </View>
-
-                  <Text style={styles.verificationLabel}>User ID</Text>
-                  <Text style={styles.verificationUserId}>
-                    {request.user_id}
-                  </Text>
-
-                  <Text style={styles.verificationLabel}>
-                    Applicant's details
-                  </Text>
-                  <Text style={styles.verificationDetails}>
-                    {request.details}
-                  </Text>
-
-                  <Text style={styles.verificationLabel}>
-                    Administrator notes (optional)
-                  </Text>
-
-                  <TextInput
-                    style={styles.notesInput}
-                    value={verificationNotes[request.id] ?? ""}
-                    onChangeText={(value) =>
-                      setVerificationNotes((current) => ({
-                        ...current,
-                        [request.id]: value,
-                      }))
-                    }
-                    placeholder="Enter a reason or review note..."
-                    placeholderTextColor={COLORS.textMuted}
-                    multiline
-                    numberOfLines={3}
-                    textAlignVertical="top"
-                    editable={!isReviewing}
-                  />
-
-                  <View style={styles.verificationActions}>
-                    <TouchableOpacity
-                      style={[
-                        styles.approveButton,
-                        isReviewing && styles.disabledButton,
-                      ]}
-                      disabled={isReviewing || reviewingRequest !== null}
-                      onPress={() =>
-                        void handleReviewVerification(request, "approved")
-                      }
-                    >
-                      <Ionicons
-                        name="checkmark-circle-outline"
-                        size={18}
-                        color="#FFFFFF"
-                      />
-                      <Text style={styles.reviewButtonText}>
-                        {isReviewing ? "Processing..." : "Approve"}
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.rejectButton,
-                        (isReviewing || reviewingRequest !== null) &&
-                          styles.disabledButton,
-                      ]}
-                      disabled={isReviewing || reviewingRequest !== null}
-                      onPress={() =>
-                        void handleReviewVerification(request, "rejected")
-                      }
-                    >
-                      <Ionicons
-                        name="close-circle-outline"
-                        size={18}
-                        color={COLORS.danger}
-                      />
-                      <Text style={styles.rejectButtonText}>Reject</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              );
-            })
-          )}
-        </View>
-
-        {/* EVENT MANAGEMENT */}
-        <View
-          style={styles.card}
-          onLayout={(event) =>
-            recordSectionPosition("events", event.nativeEvent.layout.y)
-          }
-        >
-          <Text style={styles.cardTitle}>Event Management</Text>
-          <Text style={styles.cardDescription}>
-            View all school events and manage their open or closed status.
-          </Text>
-
-          <View style={styles.divider} />
-
-          <Text style={styles.sectionTitle}>
-            Registered Events ({events.length})
-          </Text>
-
-          {loadingEvents ? (
-            <Text style={styles.loadingText}>Loading events...</Text>
-          ) : events.length === 0 ? (
-            <Text style={styles.emptyText}>No events found.</Text>
-          ) : (
-            events.map((event) => {
-              const eventStatus = event.status ?? "open";
-              const isUpdating = updatingEvent === event.id;
-
-              return (
-                <View key={event.id} style={styles.eventItem}>
-                  <Text style={styles.eventTitle}>
-                    {event.title || "Untitled event"}
-                  </Text>
-                  <Text style={styles.eventCode}>
-                    Event Code: {event.event_code}
-                  </Text>
-                  <Text style={styles.eventTime}>
-                    Start: {formatDateTime(event.start_time)}
-                  </Text>
-                  <Text style={styles.eventTime}>
-                    End: {formatDateTime(event.end_time)}
-                  </Text>
-
-                  {event.venue ? (
-                    <Text style={styles.eventVenue}>Venue: {event.venue}</Text>
-                  ) : null}
-
-                  {event.description ? (
-                    <Text style={styles.eventDescription}>
-                      Description: {event.description}
-                    </Text>
-                  ) : null}
-
-                  <View style={styles.eventBottomRow}>
-                    <View
-                      style={[
-                        styles.statusBadge,
-                        eventStatus === "closed"
-                          ? styles.closedBadge
-                          : styles.openBadge,
-                      ]}
-                    >
-                      <Text style={styles.statusBadgeText}>
-                        {eventStatus === "closed" ? "Closed" : "Open"}
-                      </Text>
-                    </View>
-
-                    <TouchableOpacity
-                      style={
-                        eventStatus === "closed"
-                          ? styles.reopenButton
-                          : styles.closeButton
-                      }
-                      disabled={isUpdating}
-                      onPress={() =>
-                        void handleChangeEventStatus(
-                          event,
-                          eventStatus === "closed" ? "open" : "closed",
-                        )
-                      }
-                    >
-                      <Text
-                        style={
-                          eventStatus === "closed"
-                            ? styles.reopenButtonText
-                            : styles.closeButtonText
-                        }
-                      >
-                        {isUpdating
-                          ? "Updating..."
-                          : eventStatus === "closed"
-                            ? "Reopen Event"
-                            : "Close Event"}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              );
-            })
-          )}
-        </View>
-
-        {/* ATTENDANCE MANAGEMENT */}
-        <View
-          style={styles.card}
-          onLayout={(event) =>
-            recordSectionPosition("attendance", event.nativeEvent.layout.y)
-          }
-        >
-          <Text style={styles.cardTitle}>Attendance Management</Text>
-          <Text style={styles.cardDescription}>
-            View, edit, and delete attendance records across the system.
-          </Text>
-
-          <View style={styles.divider} />
-
-          <Text style={styles.sectionTitle}>
-            Attendance Records ({attendance.length})
-          </Text>
-
-          {loadingAttendance ? (
-            <Text style={styles.loadingText}>
-              Loading attendance records...
-            </Text>
-          ) : attendance.length === 0 ? (
-            <Text style={styles.emptyText}>No attendance records found.</Text>
-          ) : (
-            attendance.map((record) => (
-              <View key={record.id} style={styles.attendanceItem}>
-                <Text style={styles.attendanceStudent}>
-                  {record.studentName || "Unknown student"}
-                </Text>
-                <Text style={styles.attendanceEmail}>
-                  {record.studentEmail || "No email"}
-                </Text>
-                <Text style={styles.attendanceEvent}>
-                  Event: {record.eventTitle || "Unknown event"}
-                </Text>
-                <Text style={styles.attendanceCode}>
-                  Code: {record.eventCode || "No event code"}
-                </Text>
-                <Text style={styles.attendanceTime}>
-                  Scanned: {formatDateTime(record.scannedAt)}
-                </Text>
-
-                <View style={styles.attendanceActions}>
-                  <TouchableOpacity
-                    style={styles.editAttendanceButton}
-                    onPress={() => handleOpenAttendanceModal(record)}
-                  >
-                    <Text style={styles.editAttendanceButtonText}>
-                      Edit Attendance
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.deleteAttendanceButton}
-                    onPress={() => handleDeleteAttendance(record)}
-                  >
-                    <Text style={styles.deleteAttendanceButtonText}>
-                      Delete Attendance
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))
-          )}
-        </View>
-
-        {/* REPORTS */}
-        <View
-          style={styles.card}
-          onLayout={(event) =>
-            recordSectionPosition("reports", event.nativeEvent.layout.y)
-          }
-        >
-          <Text style={styles.cardTitle}>Reports</Text>
-          <Text style={styles.cardDescription}>
-            Filter attendance by event and export the selected report.
-          </Text>
-
-          <View style={styles.reportStatsContainer}>
-            <View style={styles.reportStatBox}>
-              <Text style={styles.reportStatNumber}>{attendance.length}</Text>
-              <Text style={styles.reportStatLabel}>Total Attendance</Text>
-            </View>
-
-            <View style={styles.reportStatBox}>
-              <Text style={styles.reportStatNumber}>
-                {users.filter((profile) => profile.role === "student").length}
-              </Text>
-              <Text style={styles.reportStatLabel}>Total Students</Text>
-            </View>
-
-            <View style={styles.reportStatBox}>
-              <Text style={styles.reportStatNumber}>{events.length}</Text>
-              <Text style={styles.reportStatLabel}>Total Events</Text>
-            </View>
-          </View>
-
-          <Text style={styles.reportSectionTitle}>Filter by Event</Text>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.reportFilterList}
-          >
-            <TouchableOpacity
-              style={[
-                styles.reportFilterButton,
-                selectedReportEventId === "all" &&
-                  styles.reportFilterButtonSelected,
-              ]}
-              onPress={() => setSelectedReportEventId("all")}
-            >
-              <Text
-                style={[
-                  styles.reportFilterButtonText,
-                  selectedReportEventId === "all" &&
-                    styles.reportFilterButtonTextSelected,
-                ]}
-              >
-                All Events
+              <Text style={styles.refreshButtonText}>
+                {loadingVerification ? "Refreshing..." : "Refresh Requests"}
               </Text>
             </TouchableOpacity>
 
-            {events.map((event) => (
+            <View style={styles.divider} />
+
+            {loadingVerification ? (
+              <Text style={styles.loadingText}>
+                Loading teacher verification requests...
+              </Text>
+            ) : verificationRequests.length === 0 ? (
+              <View style={styles.emptyVerification}>
+                <Ionicons
+                  name="checkmark-circle-outline"
+                  size={35}
+                  color={COLORS.success}
+                />
+                <Text style={styles.emptyVerificationTitle}>
+                  No pending requests
+                </Text>
+                <Text style={styles.emptyVerificationText}>
+                  New teacher verification requests will appear here.
+                </Text>
+              </View>
+            ) : (
+              verificationRequests.map((request) => {
+                const isReviewing = reviewingRequest === request.id;
+
+                return (
+                  <View key={request.id} style={styles.verificationItem}>
+                    <View style={styles.verificationItemTop}>
+                      <View style={styles.verificationItemIcon}>
+                        <Ionicons
+                          name="person-outline"
+                          size={21}
+                          color={COLORS.primary}
+                        />
+                      </View>
+
+                      <View style={styles.verificationItemIdentity}>
+                        <Text style={styles.verificationItemTitle}>
+                          Teacher Access Request
+                        </Text>
+                        <Text style={styles.verificationItemDate}>
+                          Submitted: {formatDateTime(request.created_at)}
+                        </Text>
+                      </View>
+
+                      <View style={styles.pendingStatusBadge}>
+                        <Text style={styles.pendingStatusText}>Pending</Text>
+                      </View>
+                    </View>
+
+                    <Text style={styles.verificationLabel}>User ID</Text>
+                    <Text style={styles.verificationUserId}>
+                      {request.user_id}
+                    </Text>
+
+                    <Text style={styles.verificationLabel}>
+                      Applicant's details
+                    </Text>
+                    <Text style={styles.verificationDetails}>
+                      {request.details}
+                    </Text>
+
+                    <Text style={styles.verificationLabel}>
+                      Administrator notes (optional)
+                    </Text>
+
+                    <TextInput
+                      style={styles.notesInput}
+                      value={verificationNotes[request.id] ?? ""}
+                      onChangeText={(value) =>
+                        setVerificationNotes((current) => ({
+                          ...current,
+                          [request.id]: value,
+                        }))
+                      }
+                      placeholder="Enter a reason or review note..."
+                      placeholderTextColor={COLORS.textMuted}
+                      multiline
+                      numberOfLines={3}
+                      textAlignVertical="top"
+                      editable={!isReviewing}
+                    />
+
+                    <View style={styles.verificationActions}>
+                      <TouchableOpacity
+                        style={[
+                          styles.approveButton,
+                          isReviewing && styles.disabledButton,
+                        ]}
+                        disabled={isReviewing || reviewingRequest !== null}
+                        onPress={() =>
+                          void handleReviewVerification(request, "approved")
+                        }
+                      >
+                        <Ionicons
+                          name="checkmark-circle-outline"
+                          size={18}
+                          color="#FFFFFF"
+                        />
+                        <Text style={styles.reviewButtonText}>
+                          {isReviewing ? "Processing..." : "Approve"}
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.rejectButton,
+                          (isReviewing || reviewingRequest !== null) &&
+                            styles.disabledButton,
+                        ]}
+                        disabled={isReviewing || reviewingRequest !== null}
+                        onPress={() =>
+                          void handleReviewVerification(request, "rejected")
+                        }
+                      >
+                        <Ionicons
+                          name="close-circle-outline"
+                          size={18}
+                          color={COLORS.danger}
+                        />
+                        <Text style={styles.rejectButtonText}>Reject</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })
+            )}
+          </View>
+        )}
+
+        {activeSection === "events" && (
+          <View
+            style={styles.card}
+            onLayout={(event) =>
+              recordSectionPosition("events", event.nativeEvent.layout.y)
+            }
+          >
+            <Text style={styles.cardTitle}>Event Management</Text>
+            <Text style={styles.cardDescription}>
+              View all school events and manage their open or closed status.
+            </Text>
+
+            <View style={styles.divider} />
+
+            <Text style={styles.sectionTitle}>
+              Registered Events ({events.length})
+            </Text>
+
+            {loadingEvents ? (
+              <Text style={styles.loadingText}>Loading events...</Text>
+            ) : events.length === 0 ? (
+              <Text style={styles.emptyText}>No events found.</Text>
+            ) : (
+              events.map((event) => {
+                const eventStatus = event.status ?? "open";
+                const isUpdating = updatingEvent === event.id;
+
+                return (
+                  <View key={event.id} style={styles.eventItem}>
+                    <Text style={styles.eventTitle}>
+                      {event.title || "Untitled event"}
+                    </Text>
+                    <Text style={styles.eventCode}>
+                      Event Code: {event.event_code}
+                    </Text>
+                    <Text style={styles.eventTime}>
+                      Start: {formatDateTime(event.start_time)}
+                    </Text>
+                    <Text style={styles.eventTime}>
+                      End: {formatDateTime(event.end_time)}
+                    </Text>
+
+                    {event.venue ? (
+                      <Text style={styles.eventVenue}>
+                        Venue: {event.venue}
+                      </Text>
+                    ) : null}
+
+                    {event.description ? (
+                      <Text style={styles.eventDescription}>
+                        Description: {event.description}
+                      </Text>
+                    ) : null}
+
+                    <View style={styles.eventBottomRow}>
+                      <View
+                        style={[
+                          styles.statusBadge,
+                          eventStatus === "closed"
+                            ? styles.closedBadge
+                            : styles.openBadge,
+                        ]}
+                      >
+                        <Text style={styles.statusBadgeText}>
+                          {eventStatus === "closed" ? "Closed" : "Open"}
+                        </Text>
+                      </View>
+
+                      <TouchableOpacity
+                        style={
+                          eventStatus === "closed"
+                            ? styles.reopenButton
+                            : styles.closeButton
+                        }
+                        disabled={isUpdating}
+                        onPress={() =>
+                          void handleChangeEventStatus(
+                            event,
+                            eventStatus === "closed" ? "open" : "closed",
+                          )
+                        }
+                      >
+                        <Text
+                          style={
+                            eventStatus === "closed"
+                              ? styles.reopenButtonText
+                              : styles.closeButtonText
+                          }
+                        >
+                          {isUpdating
+                            ? "Updating..."
+                            : eventStatus === "closed"
+                              ? "Reopen Event"
+                              : "Close Event"}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <TouchableOpacity
+                      style={styles.viewQrButton}
+                      onPress={() => handleOpenQrModal(event)}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons
+                        name="qr-code-outline"
+                        size={18}
+                        color={COLORS.primary}
+                      />
+                      <Text style={styles.viewQrButtonText}>
+                        View Event QR Code
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })
+            )}
+          </View>
+        )}
+
+        {activeSection === "attendance" && (
+          <View
+            style={styles.card}
+            onLayout={(event) =>
+              recordSectionPosition("attendance", event.nativeEvent.layout.y)
+            }
+          >
+            <Text style={styles.cardTitle}>Attendance Management</Text>
+            <Text style={styles.cardDescription}>
+              View, edit, and delete attendance records across the system.
+            </Text>
+
+            <View style={styles.divider} />
+
+            <Text style={styles.sectionTitle}>
+              Attendance Records ({attendance.length})
+            </Text>
+
+            {loadingAttendance ? (
+              <Text style={styles.loadingText}>
+                Loading attendance records...
+              </Text>
+            ) : attendance.length === 0 ? (
+              <Text style={styles.emptyText}>No attendance records found.</Text>
+            ) : (
+              attendance.map((record) => (
+                <View key={record.id} style={styles.attendanceItem}>
+                  <Text style={styles.attendanceStudent}>
+                    {record.studentName || "Unknown student"}
+                  </Text>
+                  <Text style={styles.attendanceEmail}>
+                    {record.studentEmail || "No email"}
+                  </Text>
+                  <Text style={styles.attendanceEvent}>
+                    Event: {record.eventTitle || "Unknown event"}
+                  </Text>
+                  <Text style={styles.attendanceCode}>
+                    Code: {record.eventCode || "No event code"}
+                  </Text>
+                  <Text style={styles.attendanceTime}>
+                    Scanned: {formatDateTime(record.scannedAt)}
+                  </Text>
+
+                  <View style={styles.attendanceActions}>
+                    <TouchableOpacity
+                      style={styles.editAttendanceButton}
+                      onPress={() => handleOpenAttendanceModal(record)}
+                    >
+                      <Text style={styles.editAttendanceButtonText}>
+                        Edit Attendance
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.deleteAttendanceButton}
+                      onPress={() => handleDeleteAttendance(record)}
+                    >
+                      <Text style={styles.deleteAttendanceButtonText}>
+                        Delete Attendance
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))
+            )}
+          </View>
+        )}
+
+        {activeSection === "reports" && (
+          <View
+            style={styles.card}
+            onLayout={(event) =>
+              recordSectionPosition("reports", event.nativeEvent.layout.y)
+            }
+          >
+            <Text style={styles.cardTitle}>Reports</Text>
+            <Text style={styles.cardDescription}>
+              Filter attendance by event and export the selected report.
+            </Text>
+
+            <View style={styles.reportStatsContainer}>
+              <View style={styles.reportStatBox}>
+                <Text style={styles.reportStatNumber}>{attendance.length}</Text>
+                <Text style={styles.reportStatLabel}>Total Attendance</Text>
+              </View>
+
+              <View style={styles.reportStatBox}>
+                <Text style={styles.reportStatNumber}>
+                  {users.filter((profile) => profile.role === "student").length}
+                </Text>
+                <Text style={styles.reportStatLabel}>Total Students</Text>
+              </View>
+
+              <View style={styles.reportStatBox}>
+                <Text style={styles.reportStatNumber}>{events.length}</Text>
+                <Text style={styles.reportStatLabel}>Total Events</Text>
+              </View>
+            </View>
+
+            <Text style={styles.reportSectionTitle}>Filter by Event</Text>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.reportFilterList}
+            >
               <TouchableOpacity
-                key={event.id}
                 style={[
                   styles.reportFilterButton,
-                  selectedReportEventId === event.id &&
+                  selectedReportEventId === "all" &&
                     styles.reportFilterButtonSelected,
                 ]}
-                onPress={() => setSelectedReportEventId(event.id)}
+                onPress={() => setSelectedReportEventId("all")}
               >
                 <Text
                   style={[
                     styles.reportFilterButtonText,
-                    selectedReportEventId === event.id &&
+                    selectedReportEventId === "all" &&
                       styles.reportFilterButtonTextSelected,
                   ]}
-                  numberOfLines={1}
                 >
-                  {event.title || event.event_code}
+                  All Events
                 </Text>
               </TouchableOpacity>
-            ))}
-          </ScrollView>
 
-          <TouchableOpacity
-            style={[
-              styles.exportReportButton,
-              filteredAttendance.length === 0 && styles.disabledButton,
-            ]}
-            onPress={() => void handleExportAttendance()}
-            disabled={filteredAttendance.length === 0}
-          >
-            <Ionicons
-              name="download-outline"
-              size={19}
-              color={COLORS.textOnPrimary}
-            />
-            <Text style={styles.exportReportButtonText}>
-              {filteredAttendance.length === 0
-                ? "No Records to Export"
-                : "Export Filtered Report (CSV)"}
+              {events.map((event) => (
+                <TouchableOpacity
+                  key={event.id}
+                  style={[
+                    styles.reportFilterButton,
+                    selectedReportEventId === event.id &&
+                      styles.reportFilterButtonSelected,
+                  ]}
+                  onPress={() => setSelectedReportEventId(event.id)}
+                >
+                  <Text
+                    style={[
+                      styles.reportFilterButtonText,
+                      selectedReportEventId === event.id &&
+                        styles.reportFilterButtonTextSelected,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {event.title || event.event_code}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[
+                styles.exportReportButton,
+                filteredAttendance.length === 0 && styles.disabledButton,
+              ]}
+              onPress={() => void handleExportAttendance()}
+              disabled={filteredAttendance.length === 0}
+            >
+              <Ionicons
+                name="download-outline"
+                size={19}
+                color={COLORS.textOnPrimary}
+              />
+              <Text style={styles.exportReportButtonText}>
+                {filteredAttendance.length === 0
+                  ? "No Records to Export"
+                  : "Export Filtered Report (CSV)"}
+              </Text>
+            </TouchableOpacity>
+
+            <Text style={styles.reportSectionTitle}>
+              Attendance Records ({filteredAttendance.length})
             </Text>
-          </TouchableOpacity>
 
-          <Text style={styles.reportSectionTitle}>
-            Attendance Records ({filteredAttendance.length})
-          </Text>
-
-          {loadingAttendance ? (
-            <Text style={styles.loadingText}>
-              Loading attendance records...
-            </Text>
-          ) : filteredAttendance.length === 0 ? (
-            <Text style={styles.emptyText}>
-              No attendance records found for this selection.
-            </Text>
-          ) : (
-            filteredAttendance.map((record) => (
-              <View key={record.id} style={styles.reportEventItem}>
-                <Text style={styles.reportEventTitle}>
-                  {record.studentName || "Unknown student"}
-                </Text>
-                <Text style={styles.reportEventDetails}>
-                  Email: {record.studentEmail || "No email"}
-                </Text>
-                <Text style={styles.reportEventDetails}>
-                  Event: {record.eventTitle || "Unknown event"}
-                </Text>
-                <Text style={styles.reportEventDetails}>
-                  Event Code: {record.eventCode || "No event code"}
-                </Text>
-                <Text style={styles.reportEventDetails}>
-                  Scanned: {formatDateTime(record.scannedAt)}
-                </Text>
-              </View>
-            ))
-          )}
-
-          <Text style={styles.reportSectionTitle}>
-            Event Attendance Summary
-          </Text>
-
-          {events.length === 0 ? (
-            <Text style={styles.cardDescription}>
-              No events available for reporting.
-            </Text>
-          ) : (
-            events
-              .filter(
-                (event) =>
-                  selectedReportEventId === "all" ||
-                  event.id === selectedReportEventId,
-              )
-              .map((event) => (
-                <View key={event.id} style={styles.reportEventItem}>
+            {loadingAttendance ? (
+              <Text style={styles.loadingText}>
+                Loading attendance records...
+              </Text>
+            ) : filteredAttendance.length === 0 ? (
+              <Text style={styles.emptyText}>
+                No attendance records found for this selection.
+              </Text>
+            ) : (
+              filteredAttendance.map((record) => (
+                <View key={record.id} style={styles.reportEventItem}>
                   <Text style={styles.reportEventTitle}>
-                    {event.title || "Untitled event"}
+                    {record.studentName || "Unknown student"}
                   </Text>
                   <Text style={styles.reportEventDetails}>
-                    Event Code: {event.event_code}
+                    Email: {record.studentEmail || "No email"}
                   </Text>
                   <Text style={styles.reportEventDetails}>
-                    Attendance Records:{" "}
-                    {attendance.filter((r) => r.eventId === event.id).length}
+                    Event: {record.eventTitle || "Unknown event"}
                   </Text>
                   <Text style={styles.reportEventDetails}>
-                    Status: {event.status || "Unknown"}
+                    Event Code: {record.eventCode || "No event code"}
+                  </Text>
+                  <Text style={styles.reportEventDetails}>
+                    Scanned: {formatDateTime(record.scannedAt)}
                   </Text>
                 </View>
               ))
-          )}
-        </View>
+            )}
+
+            <Text style={styles.reportSectionTitle}>
+              Event Attendance Summary
+            </Text>
+
+            {events.length === 0 ? (
+              <Text style={styles.cardDescription}>
+                No events available for reporting.
+              </Text>
+            ) : (
+              events
+                .filter(
+                  (event) =>
+                    selectedReportEventId === "all" ||
+                    event.id === selectedReportEventId,
+                )
+                .map((event) => (
+                  <View key={event.id} style={styles.reportEventItem}>
+                    <Text style={styles.reportEventTitle}>
+                      {event.title || "Untitled event"}
+                    </Text>
+                    <Text style={styles.reportEventDetails}>
+                      Event Code: {event.event_code}
+                    </Text>
+                    <Text style={styles.reportEventDetails}>
+                      Attendance Records:{" "}
+                      {attendance.filter((r) => r.eventId === event.id).length}
+                    </Text>
+                    <Text style={styles.reportEventDetails}>
+                      Status: {event.status || "Unknown"}
+                    </Text>
+                  </View>
+                ))
+            )}
+          </View>
+        )}
       </ScrollView>
 
       {/* CHANGE ROLE MODAL */}
@@ -1411,6 +1483,69 @@ export default function AdminScreen(): React.JSX.Element {
               onPress={handleCloseAttendanceModal}
             >
               <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* EVENT QR CODE MODAL */}
+      <Modal
+        visible={showQrModal}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCloseQrModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.qrModalContainer}>
+            <View style={styles.qrModalHeader}>
+              <View style={styles.qrModalIcon}>
+                <Ionicons
+                  name="qr-code-outline"
+                  size={24}
+                  color={COLORS.primary}
+                />
+              </View>
+              <TouchableOpacity
+                onPress={handleCloseQrModal}
+                style={styles.qrCloseButton}
+                accessibilityLabel="Close QR code"
+              >
+                <Ionicons name="close" size={22} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.qrModalTitle}>Event QR Code</Text>
+            <Text style={styles.qrModalSubtitle}>
+              {selectedQrEvent?.title || "Selected event"}
+            </Text>
+
+            {selectedQrEvent && (
+              <>
+                <View style={styles.qrCodeFrame}>
+                  <QRCode
+                    value={String(
+                      selectedQrEvent.event_code || selectedQrEvent.id,
+                    )}
+                    size={220}
+                    backgroundColor="#FFFFFF"
+                    color="#17131F"
+                  />
+                </View>
+                <Text style={styles.qrEventCodeLabel}>EVENT CODE</Text>
+                <Text selectable style={styles.qrEventCode}>
+                  {selectedQrEvent.event_code || selectedQrEvent.id}
+                </Text>
+                <Text style={styles.qrInstruction}>
+                  Ask students to scan this code using QR - ATT.
+                </Text>
+              </>
+            )}
+
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={handleCloseQrModal}
+            >
+              <Text style={styles.modalButtonText}>Done</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1625,6 +1760,122 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  // DASHBOARD SECTION NAVIGATION
+  backToDashboardButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 8,
+    backgroundColor: COLORS.primarySoft,
+    borderWidth: 1,
+    borderColor: COLORS.primaryLight,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 16,
+  },
+  backToDashboardText: {
+    color: COLORS.primary,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  // EVENT QR CODE
+  viewQrButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: COLORS.primarySoft,
+    borderWidth: 1,
+    borderColor: COLORS.primaryLight,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginTop: 12,
+  },
+  viewQrButtonText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: COLORS.primary,
+  },
+  qrModalContainer: {
+    width: "100%",
+    maxWidth: 380,
+    backgroundColor: COLORS.card,
+    borderRadius: 24,
+    padding: 22,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  qrModalHeader: {
+    width: "100%",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  qrModalIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: COLORS.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  qrCloseButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.background,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  qrModalTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: COLORS.textPrimary,
+    textAlign: "center",
+    marginTop: 4,
+  },
+  qrModalSubtitle: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    marginTop: 5,
+    marginBottom: 18,
+  },
+  qrCodeFrame: {
+    padding: 14,
+    borderRadius: 18,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: 18,
+  },
+  qrEventCodeLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1.5,
+    color: COLORS.textMuted,
+  },
+  qrEventCode: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: COLORS.primary,
+    textAlign: "center",
+    marginTop: 5,
+  },
+  qrInstruction: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    marginTop: 12,
+    marginBottom: 18,
   },
 
   // ACCESS DENIED

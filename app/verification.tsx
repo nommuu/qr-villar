@@ -243,8 +243,8 @@ export default function Verification() {
             <Text style={styles.heroTitle}>Teacher Verification</Text>
 
             <Text style={styles.heroDescription}>
-              Request teacher access to Lavender Attend. An administrator must
-              review and approve your request before your role changes.
+              Request teacher access to QR - ATT. An administrator must review
+              and approve your request before your role changes.
             </Text>
           </View>
 
