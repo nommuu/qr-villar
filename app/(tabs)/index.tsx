@@ -296,7 +296,7 @@ export default function Index() {
         </View>
 
         <Text style={styles.footer}>
-          Lavender Attend · Smart School Event Attendance
+          QR - ATT · Smart School Event Attendance
         </Text>
       </ScrollView>
     </SafeAreaView>
